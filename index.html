@@ -95,7 +95,7 @@
       return parseGviz(txt);
     }
 
-    // === FIX 1: preferimos c.f (formateado) cuando existe; si no, c.v ===
+    // Preferimos c.f (formateado) cuando existe; si no, c.v
     function parseGviz(text){
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
@@ -141,31 +141,49 @@
     // Formatos condicionales y normalizaciones (Torneo)
     // =============================
     function applyConditionalFormatting(table, cols){
-      const norm = s => (s||'').toLowerCase().split(' ').join('');
+      const norm = s => (s||'').toLowerCase().replace(/\s+/g,'');
       const names = cols.map(norm);
-      const idxScore = names.findIndex(h => h.indexOf('score') !== -1);
-      const idxWin   = names.findIndex(h => h.indexOf('winrate') !== -1);
-      const idxCGan  = names.findIndex(h => h.indexOf('cambiopartidasganadas') !== -1);
-      const idxCPer  = names.findIndex(h => h.indexOf('cambiopartidasperdidas') !== -1);
-      const idxCPos  = names.findIndex(h => h.indexOf('cambioposición') !== -1 || h.indexOf('cambioposicion') !== -1);
+
+      const idxScore = names.findIndex(h => h.includes('score'));
+      const idxWin   = names.findIndex(h => h.includes('winrate'));
+      const idxCGan  = names.findIndex(h => h.includes('cambiopartidasganadas'));
+      const idxCPer  = names.findIndex(h => h.includes('cambiopartidasperdidas'));
+      const idxCPos  = names.findIndex(h => h.includes('cambioposición') || h.includes('cambioposicion'));
+
+      const toTriangle = (cell) => {
+        const raw = (cell.textContent || '').trim();
+        // si ya trae ▲/▼ desde c.f, no tocamos
+        if (/[▲▼]/.test(raw)) return;
+
+        const n = parseFloat(raw.replace(',', '.'));
+        if (isNaN(n)) return;
+
+        if (n > 0) cell.textContent = `▲ ${Math.abs(n)}`;
+        else if (n < 0) cell.textContent = `▼ ${Math.abs(n)}`;
+        else cell.textContent = '0';
+      };
+
+      const paintCambio = (cell, invert=false) => {
+        const t = (cell.textContent||'').trim();
+        if (t === '0' || t === '') { cell.style.color = '#42A5F5'; return; }
+        const up = t.includes('▲');
+        const down = t.includes('▼');
+        if (!invert) {
+          if (up) cell.style.color = '#2E7D32';   // sube => verde
+          if (down) cell.style.color = '#C62828'; // baja => rojo
+        } else {
+          if (up) cell.style.color = '#C62828';   // en Perdidas, subir es malo
+          if (down) cell.style.color = '#2E7D32'; // bajar perdidas es bueno
+        }
+      };
 
       table.querySelectorAll('tbody tr').forEach(tr => {
+        // Score => 2 decimales + heat
         if (idxScore !== -1) {
           const td = tr.children[idxScore];
           const n = parseFloat(String(td.textContent).replace(',', '.'));
           if (!isNaN(n)) td.textContent = n.toFixed(2);
-        }
-        if (idxWin !== -1) {
-          const td = tr.children[idxWin];
-          let n = parseFloat(String(td.textContent).replace('%','').replace(',', '.'));
-          if (!isNaN(n)) {
-            if (n <= 1) n = n * 100;
-            td.textContent = n.toFixed(2) + '%';
-          }
-        }
-        if (idxScore !== -1){
-          const td = tr.children[idxScore];
-          const n = parseFloat(String(td.textContent).replace(',', '.'));
+
           let bg=null, fg='#000';
           if (!isNaN(n)){
             if (n >= 90) bg = '#00E5FF';
@@ -177,26 +195,40 @@
             else if (n >= 30) bg = '#FB8C00';
             else if (n >= 20) bg = '#FF3B30';
             else if (n >= 10) { bg = '#C62828'; fg = '#FFF'; }
-            else { bg = '#000000'; fg = '#FFF'; }
+            else { bg = '#000'; fg = '#FFF'; }
           }
           if (bg){ td.style.background = bg; td.style.color = fg; td.classList.add('score'); }
         }
-        const paintCambio = (cell, invert=false) => {
-          const t = (cell.textContent||'').trim();
-          if (t === '0') { cell.style.color = '#42A5F5'; return; }
-          const up = t.indexOf('▲') !== -1;
-          const down = t.indexOf('▼') !== -1;
-          if (!invert) { if (up) cell.style.color = '#2E7D32'; if (down) cell.style.color = '#C62828'; }
-          else { if (up) cell.style.color = '#C62828'; if (down) cell.style.color = '#2E7D32'; }
-        };
-        if (idxCGan !== -1) paintCambio(tr.children[idxCGan], false);
-        if (idxCPer !== -1) paintCambio(tr.children[idxCPer], true);
+
+        // Win Rate => %
+        if (idxWin !== -1) {
+          const td = tr.children[idxWin];
+          let n = parseFloat(String(td.textContent).replace('%','').replace(',', '.'));
+          if (!isNaN(n)) {
+            if (n <= 1) n = n * 100;
+            td.textContent = n.toFixed(2) + '%';
+          }
+        }
+
+        // Cambios de partidas
+        if (idxCGan !== -1) {
+          const td = tr.children[idxCGan];
+          toTriangle(td);
+          paintCambio(td, false);
+        }
+        if (idxCPer !== -1) {
+          const td = tr.children[idxCPer];
+          toTriangle(td);
+          paintCambio(td, true);
+        }
+
+        // Cambio de posición (si lo usás)
         if (idxCPos !== -1){
           const td = tr.children[idxCPos];
           const t = (td.textContent||'').trim();
           if (t === '-') td.style.color = '#42A5F5';
-          else if (t.indexOf('▲') !== -1) td.style.color = '#2E7D32';
-          else if (t.indexOf('▼') !== -1) td.style.color = '#C62828';
+          else if (t.includes('▲')) td.style.color = '#2E7D32';
+          else if (t.includes('▼')) td.style.color = '#C62828';
         }
       });
     }
@@ -304,17 +336,14 @@
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
         let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
 
-        // === FIX 2: no cortar columnas de 'cambio de partidas' ===
+        // No cortar columnas de cambios
         const norm = (h) => (h || '').toString().trim().toLowerCase();
         const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
         const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
         const cGanIdx      = cols.findIndex(h => /cambio.*partidas.*ganad/i.test(norm(h)));
         const cPerIdx      = cols.findIndex(h => /cambio.*partidas.*perdi/i.test(norm(h)));
-
-        // Mantener hasta la última de las columnas clave presentes
         const indicesClave = [scoreIdx, cambioPosIdx, cGanIdx, cPerIdx].filter(i => i >= 0);
         const lastKeep = indicesClave.length ? Math.max(...indicesClave) : (cols.length - 1);
-
         const useIdx = Array.from({ length: lastKeep + 1 }, (_, i) => i);
 
         cols = useIdx.map(i => cols[i]);
