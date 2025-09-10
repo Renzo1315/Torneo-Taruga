@@ -117,7 +117,24 @@
           td.textContent = c;
           tr.appendChild(td);
         });
-        tbo
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      return table;
+    }
+
+    function clamp(n,min,max){return Math.max(min, Math.min(max, n));}
+
+    function colorForScore(val){
+      // Paleta aproximada al sheet: verde -> amarillo -> naranja
+      if (isNaN(val)) return '';
+      const v = clamp(val, 0, 70); // ajusta al rango típico
+      const t = v/70; // 0..1
+      // Interpola entre #218838 (verde) y #e67e22 (naranja)
+      const c1=[0x21,0x88,0x38], c2=[0xe6,0x7e,0x22];
+      const mix = i => Math.round(c1[i]*(1-t)+c2[i]*t);
+      return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
+    }
 
     function sortBy(table, colIndex){
       const tbody = table.querySelector('tbody');
@@ -152,7 +169,8 @@
       });
     }
 
-    async function loadOne({title, gid}){
+    async function loadOne(entry){
+      const { title, gid, type } = entry;
       const card = document.createElement('article');
       card.className = 'card';
       const head = document.createElement('header');
@@ -165,23 +183,109 @@
       card.appendChild(head);
 
       try {
-        const url = gvizUrl(gid) + `&cacheBust=${Date.now()}`; // evita caché
+        const url = gvizUrl(gid) + `&cacheBust=${Date.now()}`;
         const res = await fetch(url, { cache: 'no-store' });
         const txt = await res.text();
         const data = parseGviz(txt);
+
+        // util para cortar por rango
+        const sliceRange = (rows, {startCol=0,endCol=null,startRow=0,endRow=null}={}) => {
+          const eCol = endCol ?? (rows[0]?.length ?? 0)-1;
+          const eRow = endRow ?? rows.length-1;
+          return rows.slice(startRow, eRow+1).map(r => r.slice(startCol, eCol+1));
+        };
+
+        if (type === 'reglamento') {
+          const wrap = document.createElement('div');
+          wrap.className = 'two-col';
+
+          // Panel izquierdo: cuerpo del reglamento (B..K)
+          const left = document.createElement('div'); left.className='panel';
+          const lh = document.createElement('header'); lh.textContent='Reglamento'; left.appendChild(lh);
+          const lb = document.createElement('div'); lb.className='body'; left.appendChild(lb);
+
+          const leftRows = sliceRange(data.rows, entry.leftRange);
+          // Render simplificado: B,C como numeración; D..K como texto unido
+          leftRows.forEach(r => {
+            const num1 = r[0] ?? ''; // B
+            const num2 = r[1] ?? ''; // C
+            const text = (r.slice(2).join(' ').trim());
+            if (!num1 && !num2 && !text) return;
+            const row = document.createElement('div');
+            if (/secci[óo]n/i.test(text)) { // fila de sección
+              row.style.margin='12px 0 6px';
+              row.innerHTML = `<div class="badge">${text}</div>`;
+            } else if (/^Art\./i.test(num1) || /^Art\./i.test(num2)) {
+              row.style.display='grid';
+              row.style.gridTemplateColumns='80px 1fr';
+              row.style.gap='8px';
+              row.style.padding='6px 0';
+              row.innerHTML = `<div><strong>${[num1,num2].filter(Boolean).join(' ')}</strong></div><div style="text-align:center;line-height:1.35">${text}</div>`;
+            } else if (text) {
+              row.style.textAlign='center';
+              row.style.padding='4px 0';
+              row.textContent = text;
+            }
+            lb.appendChild(row);
+          });
+
+          // Panel derecho: Enmiendas (M..V)
+          const right = document.createElement('div'); right.className='panel';
+          const rh = document.createElement('header'); rh.textContent='Enmiendas'; right.appendChild(rh);
+          const rb = document.createElement('div'); rb.className='body'; right.appendChild(rb);
+          const rightRows = sliceRange(data.rows, entry.rightRange);
+          // Asumimos encabezado en primera fila: [Titulo, Texto]
+          rightRows.forEach(r => {
+            const titulo = r[0];
+            const texto = r.slice(1).join(' ').trim();
+            if (!titulo && !texto) return;
+            const item = document.createElement('div');
+            if (/enmienda/i.test(titulo)) {
+              item.innerHTML = `<div class="badge">${titulo}</div><div style="margin-top:6px">${texto}</div>`;
+            } else {
+              item.innerHTML = `<div><strong>${titulo ?? ''}</strong></div><div>${texto}</div>`;
+            }
+            item.style.padding='6px 0';
+            rb.appendChild(item);
+          });
+
+          wrap.appendChild(left);
+          wrap.appendChild(right);
+          card.appendChild(wrap);
+          return card;
+        }
+
+        if (type === 'ranking') {
+          const rows = sliceRange(data.rows, entry.range);
+          const cols = data.cols.slice(entry.range?.startCol ?? 0, (entry.range?.endCol ?? data.cols.length-1)+1);
+          const table = toTable({cols, rows});
+          // aplicar colores a columna Score
+          const scoreIdx = cols.findIndex(h => /score/i.test(h));
+          if (scoreIdx !== -1) {
+            table.querySelectorAll('tbody tr').forEach(tr => {
+              const val = parseFloat((tr.children[scoreIdx].textContent || '').replace(',', '.'));
+              const bg = colorForScore(val);
+              if (bg) {
+                tr.children[scoreIdx].style.background = bg;
+                tr.children[scoreIdx].style.color = '#000';
+                tr.children[scoreIdx].classList.add('score');
+              }
+            });
+          }
+          card.appendChild(table);
+          return card;
+        }
+
+        // Default: tabla simple
         card.appendChild(toTable(data));
+        return card;
       } catch (err) {
         const p = document.createElement('p');
         p.className = 'warn';
-        p.innerHTML = `No se pudo leer esta hoja. <br><b>Posible causa:</b> permisos. <br>
-          Asegurate en el Google Sheet original de: <br>
-          • Compartir → <b>Cualquier persona con el enlace – Lector</b>, o <br>
-          • Archivo → Compartir → <b>Publicar en la web</b> (la hoja).<br><br>
-          Error: ${err.message}`;
+        p.innerHTML = `No se pudo leer esta hoja. Error: ${err.message}`;
         card.appendChild(p);
+        return card;
       }
-
-      return card;
     }
 
     async function loadAll(){
