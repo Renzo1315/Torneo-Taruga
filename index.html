@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Torneo Taruga</title>
+  <style>
+    :root { --bg:#0b1220; --card:#121a2b; --text:#e6eefc; --muted:#8aa0c8; --accent:#4cc9f0; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Ubuntu,sans-serif;background:var(--bg);color:var(--text)}
+    header{padding:24px 16px;text-align:center;border-bottom:1px solid #22314f}
+    header h1{margin:0;font-weight:700;letter-spacing:.3px}
+    header p{margin:6px 0 0;color:var(--muted)}
+    main{max-width:1200px;margin:0 auto;padding:20px}
+    .controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+    .btn{background:var(--card);border:1px solid #22314f;color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{border-color:var(--accent)}
+    .grid{display:grid;grid-template-columns:1fr;gap:18px}
+    @media (min-width: 900px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #22314f;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    .card header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:0;border-bottom:1px solid #22314f}
+    .card h2{margin:0;font-size:18px}
+    .card small{color:var(--muted)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 12px;border-bottom:1px solid #22314f;text-align:center}
+    th{position:sticky;top:0;background:#0e172a;font-weight:600}
+    tr:nth-child(even) td{background:#0f1a31}
+    .footer{padding:20px;text-align:center;color:var(--muted)}
+    .hidden{display:none}
+    input[type="search"]{background:#0e172a;color:var(--text);border:1px solid #22314f;border-radius:10px;padding:8px 12px;min-width:240px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Tabla del Torneo Taruga</h1>
+    <p>Datos leídos en vivo desde Google Sheets (solo las hojas que elijas mostrar).</p>
+  </header>
+  <main>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Buscar en las tablas…" />
+      <button class="btn" id="refresh">Actualizar datos</button>
+    </div>
+
+    <section id="cards" class="grid"></section>
+
+    <div class="footer">Hecho para Renzo • GitHub Pages • <span id="updated"></span></div>
+  </main>
+
+  <script>
+    // =============================
+    // 🚧 CONFIGURA AQUI TU PLANILLA
+    // =============================
+    // En lugar de un ID + GID, usaremos los links "publicados" en formato CSV (como el que pasaste).
+    // Agrega una entrada por cada hoja que quieras mostrar.
+    // url debe ser de la forma: https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=GID&output=csv
+
+    const SHEETS = [
+      {
+        title: "Reglamento",
+        url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pub?gid=406827875&output=csv"
+      },
+      {
+        title: "Torneo Apertura 2025",
+        url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pub?gid=888277887&output=csv"
+      },
+      {
+        title: "Torneo Clausura 2025",
+        url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pub?gid=62379087&output=csv"
+      }
+    ];
+
+    // =============================
+    // ⚙️ Utilidades
+    // =============================
+    const cardsEl = document.getElementById('cards');
+    const updatedEl = document.getElementById('updated');
+    const searchEl = document.getElementById('search');
+
+    // Parser CSV simple que respeta comillas
+    function parseCSV(text) {
+      const rows = [];
+      let row = [];
+      let cell = '';
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (inQuotes) {
+          if (ch === '"' && next === '"') { cell += '"'; i++; }
+          else if (ch === '"') { inQuotes = false; }
+          else { cell += ch; }
+        } else {
+          if (ch === '"') { inQuotes = true; }
+          else if (ch === ',') { row.push(cell); cell = ''; }
+          else if (ch === '
+' || ch === '') {
+            if (cell !== '' || row.length) { row.push(cell); rows.push(row); row = []; cell = ''; }
+          } else { cell += ch; }
+        }
+      }
+      if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+      return rows;
+    }
+
+    function toTableFromCSV(rows){
+      if (!rows.length) return document.createElement('table');
+      const cols = rows[0];
+      const bodyRows = rows.slice(1).filter(r => r.join('').trim() !== '');
+
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      cols.forEach((h, idx) => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => sortBy(table, idx));
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      bodyRows.forEach(r => {
+        const tr = document.createElement('tr');
+        cols.forEach((_, i) => {
+          const td = document.createElement('td');
+          td.textContent = r[i] ?? '';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      return table;
+    }
+
+    function sortBy(table, colIndex){
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const current = table.getAttribute('data-sort-col') == colIndex ? table.getAttribute('data-sort-dir') : null;
+      const dir = current === 'asc' ? 'desc' : 'asc';
+      rows.sort((a,b) => {
+        const av = a.children[colIndex].textContent;
+        const bv = b.children[colIndex].textContent;
+        const an = parseFloat(av.replace(/,/g, '.'));
+        const bn = parseFloat(bv.replace(/,/g, '.'));
+        const aIsNum = !isNaN(an) && av.trim() !== '';
+        const bIsNum = !isNaN(bn) && bv.trim() !== '';
+        if(aIsNum && bIsNum){
+          return dir === 'asc' ? an - bn : bn - an;
+        }
+        return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+      tbody.innerHTML = '';
+      rows.forEach(r => tbody.appendChild(r));
+      table.setAttribute('data-sort-col', colIndex);
+      table.setAttribute('data-sort-dir', dir);
+    }
+
+    function filterTables(term){
+      const cards = Array.from(document.querySelectorAll('.card'));
+      cards.forEach(card => {
+        const table = card.querySelector('table');
+        if(!table){ card.classList.remove('hidden'); return; }
+        const hay = Array.from(table.querySelectorAll('tbody tr')).some(tr =>
+          Array.from(tr.children).some(td => td.textContent.toLowerCase().includes(term))
+        );
+        card.classList.toggle('hidden', !hay);
+      });
+    }
+
+    async function loadOne({title, url}){
+      const card = document.createElement('article');
+      card.className = 'card';
+      const head = document.createElement('header');
+      const h2 = document.createElement('h2');
+      h2.textContent = title;
+      const small = document.createElement('small');
+      head.appendChild(h2);
+      head.appendChild(small);
+      card.appendChild(head);
+
+      // Si es un link publicado como HTML (pubhtml), lo incrustamos en un iframe para evitar CORS
+      if (/\/pubhtml(\?|$)/.test(url)) {
+        const iframe = document.createElement('iframe');
+        // Mejoras visuales del iframe
+        const u = new URL(url);
+        // Fuerza parámetros útiles para embed
+        u.searchParams.set('widget', 'true');
+        u.searchParams.set('headers', 'false');
+        iframe.src = u.toString();
+        iframe.style.width = '100%';
+        iframe.style.height = '600px';
+        iframe.style.border = '0';
+        card.appendChild(iframe);
+        return card;
+      }
+
+      // Si es CSV publicado, lo descargamos y parseamos
+      const res = await fetch(url, { cache: 'no-store' });
+      const txt = await res.text();
+      const rows = parseCSV(txt);
+      card.appendChild(toTableFromCSV(rows));
+      return card;
+    }
+
+    async function loadAll(){
+      cardsEl.innerHTML = '';
+      const parts = await Promise.allSettled(SHEETS.map(loadOne));
+      let ok = 0;
+      parts.forEach(p => { if(p.status === 'fulfilled'){ ok++; cardsEl.appendChild(p.value); } });
+      updatedEl.textContent = ok ? `Última actualización: ${new Date().toLocaleString()}` : 'Sin datos';
+    }
+
+    document.getElementById('refresh').addEventListener('click', loadAll);
+    searchEl.addEventListener('input', (e)=> filterTables(e.target.value.toLowerCase()));
+
+    // Arranque
+    loadAll()
+    loadAll();
+  </script>
+</body>
+</html>
