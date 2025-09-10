@@ -293,4 +293,21 @@
           }
           tbody.appendChild(tr);
         });
-        table.appendChild(tbody);
+        table.appendChild(tbody); card.appendChild(table);
+        applyConditionalFormatting(table, cols);
+      }catch(err){
+        const p=document.createElement('p'); p.className='warn'; p.textContent=`No se pudo leer la tabla: ${err.message}`;
+        card.appendChild(p);
+      }
+    }
+
+    btnReglamento.onclick = ()=>renderReglamento();
+    btnTorneo.onclick     = ()=>renderRanking(selTorneo.value);
+    btnActualizar.onclick = ()=>{
+      if (view.querySelector('table')) renderRanking(selTorneo.value);
+      else renderReglamento();
+    };
+    window.onload=()=>renderRanking('apertura');
+  </script>
+</body>
+</html>
