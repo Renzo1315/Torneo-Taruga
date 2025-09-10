@@ -95,6 +95,7 @@
       return parseGviz(txt);
     }
 
+    // === FIX 1: preferimos c.f (formateado) cuando existe; si no, c.v ===
     function parseGviz(text){
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
@@ -105,7 +106,13 @@
         throw new Error(det);
       }
       const cols = (json.table?.cols || []).map(c => c.label || c.id || "");
-      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => (c ? c.v : "")));
+      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => {
+        if (!c) return "";
+        const formatted = (c.f !== undefined && c.f !== null) ? c.f : null;
+        const raw = (c.v !== undefined && c.v !== null) ? c.v : "";
+        const out = (formatted !== null) ? formatted : raw;
+        return String(out);
+      }));
       return { cols, rows };
     }
 
@@ -297,15 +304,18 @@
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
         let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
 
-        // Recorte determinístico
+        // === FIX 2: no cortar columnas de 'cambio de partidas' ===
         const norm = (h) => (h || '').toString().trim().toLowerCase();
         const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
         const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
-        let lastKeep = scoreIdx;
-        if (which === 'clausura' && cambioPosIdx !== -1) lastKeep = Math.max(scoreIdx, cambioPosIdx);
-        const useIdx = (lastKeep >= 0)
-          ? Array.from({ length: lastKeep + 1 }, (_, i) => i)
-          : Array.from({ length: cols.length }, (_, i) => i);
+        const cGanIdx      = cols.findIndex(h => /cambio.*partidas.*ganad/i.test(norm(h)));
+        const cPerIdx      = cols.findIndex(h => /cambio.*partidas.*perdi/i.test(norm(h)));
+
+        // Mantener hasta la última de las columnas clave presentes
+        const indicesClave = [scoreIdx, cambioPosIdx, cGanIdx, cPerIdx].filter(i => i >= 0);
+        const lastKeep = indicesClave.length ? Math.max(...indicesClave) : (cols.length - 1);
+
+        const useIdx = Array.from({ length: lastKeep + 1 }, (_, i) => i);
 
         cols = useIdx.map(i => cols[i]);
         const prunedRows = rows.map(r => useIdx.map(i => r[i]));
