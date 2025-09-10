@@ -50,23 +50,13 @@
     // =============================
     // 🚧 CONFIGURA AQUI TU PLANILLA
     // =============================
-    // En lugar de un ID + GID, usaremos los links "publicados" en formato CSV (como el que pasaste).
-    // Agrega una entrada por cada hoja que quieras mostrar.
-    // url debe ser de la forma: https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=GID&output=csv
+    // Usaremos el ID del documento + la lista de GIDs de las hojas a mostrar (tablas limpias con GViz JSON)
+    const SHEET_ID = "1_fruD9zPdXhiWcP_wuuryIFHmxLQBlYHDM9CyY0_1s4";
 
     const SHEETS = [
-      {
-        title: "Reglamento",
-        url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pub?gid=406827875&output=csv"
-      },
-      {
-        title: "Torneo Apertura 2025",
-        url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pub?gid=888277887&output=csv"
-      },
-      {
-        title: "Torneo Clausura 2025",
-        url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pub?gid=62379087&output=csv"
-      }
+      { title: "Reglamento", gid: "406827875" },
+      { title: "Torneo Apertura 2025", gid: "888277887" },
+      { title: "Torneo Clausura 2025", gid: "62379087" }
     ];
 
     // =============================
@@ -76,7 +66,21 @@
     const updatedEl = document.getElementById('updated');
     const searchEl = document.getElementById('search');
 
-    // Parser CSV simple que respeta comillas
+    function gvizUrl(gid){
+      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+    }
+
+    // Parser GViz JSON envuelto
+    function parseGviz(text){
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      const json = JSON.parse(text.slice(start, end + 1));
+      const cols = json.table.cols.map(c => c.label || c.id || "");
+      const rows = json.table.rows.map(r => (r.c || []).map(c => (c ? c.v : "")));
+      return { cols, rows };
+    }
+
+    // Parser CSV (por si se usan URLs CSV en el futuro)
     function parseCSV(text) {
       const rows = [];
       let row = [];
@@ -100,6 +104,35 @@
       }
       if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
       return rows;
+    }
+
+    function toTable({cols, rows}){
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      cols.forEach((h, idx) => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => sortBy(table, idx));
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        if(r.every(cell => String(cell).trim() === '')) return; // omite filas vacías
+        const tr = document.createElement('tr');
+        r.forEach(c => {
+          const td = document.createElement('td');
+          td.textContent = c;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      return table;
     }
 
     function toTableFromCSV(rows){
@@ -169,7 +202,8 @@
       });
     }
 
-    async function loadOne({title, url}){
+    async function loadOne(entry){
+      const { title } = entry;
       const card = document.createElement('article');
       card.className = 'card';
       const head = document.createElement('header');
@@ -180,12 +214,20 @@
       head.appendChild(small);
       card.appendChild(head);
 
-      // Si es un link publicado como HTML (pubhtml), lo incrustamos en un iframe para evitar CORS
-      if (/\/pubhtml(\?|$)/.test(url)) {
+      // Caso 1: tenemos gid → usamos GViz JSON (tablas limpias)
+      if (entry.gid) {
+        const res = await fetch(gvizUrl(entry.gid), { cache: 'no-store' });
+        const txt = await res.text();
+        const data = parseGviz(txt);
+        small.textContent = `gid: ${entry.gid}`;
+        card.appendChild(toTable(data));
+        return card;
+      }
+
+      // Caso 2: link publicado como HTML → incrustar en iframe (fallback sin CORS)
+      if (entry.url && /\/pubhtml(\?|$)/.test(entry.url)) {
         const iframe = document.createElement('iframe');
-        // Mejoras visuales del iframe
-        const u = new URL(url);
-        // Fuerza parámetros útiles para embed
+        const u = new URL(entry.url);
         u.searchParams.set('widget', 'true');
         u.searchParams.set('headers', 'false');
         iframe.src = u.toString();
@@ -196,11 +238,19 @@
         return card;
       }
 
-      // Si es CSV publicado, lo descargamos y parseamos
-      const res = await fetch(url, { cache: 'no-store' });
-      const txt = await res.text();
-      const rows = parseCSV(txt);
-      card.appendChild(toTableFromCSV(rows));
+      // Caso 3: URL CSV publicado → parsear CSV
+      if (entry.url) {
+        const res = await fetch(entry.url, { cache: 'no-store' });
+        const txt = await res.text();
+        const rows = parseCSV(txt);
+        card.appendChild(toTableFromCSV(rows));
+        return card;
+      }
+
+      // Si no hay datos configurados
+      const p = document.createElement('p');
+      p.textContent = 'Sin fuente configurada para esta hoja.';
+      card.appendChild(p);
       return card;
     }
 
@@ -216,6 +266,7 @@
     searchEl.addEventListener('input', (e)=> filterTables(e.target.value.toLowerCase()));
 
     // Arranque
+    loadAll
     loadAll()
     loadAll();
   </script>
