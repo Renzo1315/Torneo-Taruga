@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Torneo Taruga</title>
+  <title>Torneo Taruga – GViz</title>
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --text:#e6eefc; --muted:#8aa0c8; --border:#22314f; --accent:#4cc9f0; }
     *{box-sizing:border-box}
@@ -31,7 +31,7 @@
     .warn{padding:12px 16px;color:#ffd7d7}
     .score{font-weight:800;border-left:3px solid #22314f}
 
-    /* Reglamento (esquema plano) */
+    /* Reglamento */
     .reg-title{font-size:22px;font-weight:900;text-align:center;margin:6px 0 10px}
     .reg-sec-title{font-size:18px;font-weight:800;margin:12px 0 6px;text-align:center}
     .reg-row{display:grid;grid-template-columns:140px 1fr;gap:12px;padding:6px 0}
@@ -58,7 +58,7 @@
   </header>
   <main>
     <section id="view" class="view"></section>
-    <p style="text-align:center;color:var(--muted)"> © 2025. Oriente Sur • Todos los derechos reservados</p>
+    <p style="text-align:center;color:var(--muted)">Hecho para Renzo • GitHub Pages</p>
   </main>
 
   <script>
@@ -69,20 +69,16 @@
 
     const CFG = {
       reglamento: { gid: "406827875" },
-      apertura:   { gid: "888277887", range: { startCol:0, endCol:9,  startRow:0, endRow:null } },  // A..J
-      clausura:   { gid: "62379087",  range: { startCol:0, endCol:10, startRow:0, endRow:null } }   // A..K
+      apertura:   { gid: "888277887", range: { startCol:0, endCol:9,  startRow:0, endRow:null } },
+      clausura:   { gid: "62379087",  range: { startCol:0, endCol:10, startRow:0, endRow:null } }
     };
 
-    // =============================
-    // Helpers
-    // =============================
     const view = document.getElementById('view');
     const btnReglamento = document.getElementById('btnReglamento');
     const btnTorneo = document.getElementById('btnTorneo');
     const btnActualizar = document.getElementById('btnActualizar');
     const selTorneo = document.getElementById('selTorneo');
 
-    // Si se pasa rangeA1 => añadimos headers=0 para que NO infiera encabezados y NO salte filas
     function gvizUrl(gid, rangeA1){
       const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
       const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}&headers=0` : '';
@@ -105,7 +101,13 @@
         throw new Error(det);
       }
       const cols = (json.table?.cols || []).map(c => c.label || c.id || "");
-      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => (c ? c.v : "")));
+      const rows = (json.table?.rows || []).map(r =>
+        (r.c || []).map(c => {
+          if (!c) return "";
+          if (c.f !== undefined && c.f !== null) return c.f;
+          return c.v ?? "";
+        })
+      );
       return { cols, rows };
     }
 
@@ -130,9 +132,6 @@
       card.appendChild(head); return card;
     }
 
-    // =============================
-    // Formatos condicionales y normalizaciones (Torneo)
-    // =============================
     function applyConditionalFormatting(table, cols){
       const norm = s => (s||'').toLowerCase().split(' ').join('');
       const names = cols.map(norm);
@@ -140,7 +139,7 @@
       const idxWin   = names.findIndex(h => h.indexOf('winrate') !== -1);
       const idxCGan  = names.findIndex(h => h.indexOf('cambiopartidasganadas') !== -1);
       const idxCPer  = names.findIndex(h => h.indexOf('cambiopartidasperdidas') !== -1);
-      const idxCPos  = names.findIndex(h => h.indexOf('cambioposición') !== -1 || h.indexOf('cambioposicion') !== -1);
+      const idxCPos  = names.findIndex(h => /cambioposici/.test(h));
 
       table.querySelectorAll('tbody tr').forEach(tr => {
         if (idxScore !== -1) {
@@ -177,10 +176,8 @@
         const paintCambio = (cell, invert=false) => {
           const t = (cell.textContent||'').trim();
           if (t === '0') { cell.style.color = '#42A5F5'; return; }
-          const up = t.indexOf('▲') !== -1;
-          const down = t.indexOf('▼') !== -1;
-          if (!invert) { if (up) cell.style.color = '#2E7D32'; if (down) cell.style.color = '#C62828'; }
-          else { if (up) cell.style.color = '#C62828'; if (down) cell.style.color = '#2E7D32'; }
+          if (t.indexOf('▲') !== -1) cell.style.color = invert ? '#C62828' : '#2E7D32';
+          if (t.indexOf('▼') !== -1) cell.style.color = invert ? '#2E7D32' : '#C62828';
         };
         if (idxCGan !== -1) paintCambio(tr.children[idxCGan], false);
         if (idxCPer !== -1) paintCambio(tr.children[idxCPer], true);
@@ -194,13 +191,9 @@
       });
     }
 
-    // =============================
-    // Reglamento (forzando rangos A1 + headers=0)
-    // =============================
     async function renderReglamento(){
       view.innerHTML='';
       const gid = CFG.reglamento.gid;
-
       const card = makeCard('Reglamento', `gid: ${gid}`);
       const wrap = document.createElement('div'); wrap.className='two-col';
 
@@ -215,50 +208,38 @@
       card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right); view.appendChild(card);
 
       try{
-        // Reglamento: B1:D500 (B1 título; desde fila 2 => B,C,D)
         const regl = await fetchRange(gid, 'B1:D500');
-        const R = regl.rows; // Relativo al rango: B=0, C=1, D=2
-
-        // Título (B1)
+        const R = regl.rows;
         const titulo = (R[0]?.[0] ?? '').toString().trim();
         if (titulo){
           const t = document.createElement('div'); t.className='reg-title'; t.textContent = titulo;
           lb.appendChild(t);
         }
-
-        // Cuerpo: desde fila 2 (index 1)
         for (let i = 1; i < R.length; i++){
           const r = R[i] || [];
-          const B = (r[0] ?? '').toString().trim(); // índice Sección/Art.
-          const C = (r[1] ?? '').toString().trim(); // inciso/numeral
-          const D = (r[2] ?? '').toString().trim(); // contenido
-
+          const B = (r[0] ?? '').toString().trim();
+          const C = (r[1] ?? '').toString().trim();
+          const D = (r[2] ?? '').toString().trim();
           if (!B && !C && !D) continue;
-
           if (/^Sección\b/i.test(D)) {
             const rowSec = document.createElement('div'); rowSec.className='reg-row';
             const idx = document.createElement('div'); idx.className='idx';
             idx.textContent = [B, C].filter(Boolean).join(' ');
             const title = document.createElement('div'); title.className='reg-sec-title';
-            title.style.margin='0';
             title.textContent = D;
             rowSec.appendChild(idx); rowSec.appendChild(title);
             lb.appendChild(rowSec);
             continue;
           }
-
           const item = document.createElement('div'); item.className = 'reg-row';
           const idx = document.createElement('div'); idx.className = 'idx';
-          idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
+          idx.textContent = [B, C].filter(Boolean).join(' ');
           const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
           txtDiv.textContent = D;
           item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
         }
-
-        // Enmiendas: F1:G100 (F1 título; F/G desde fila 2)
         const enm = await fetchRange(gid, 'F1:G100');
-        const E = enm.rows; // F=0, G=1
-
+        const E = enm.rows;
         const enTitle = (E[0]?.[0] ?? '').toString().trim();
         if (enTitle){
           const t2 = document.createElement('div'); t2.className='reg-sec-title'; t2.textContent = enTitle;
@@ -268,36 +249,28 @@
           const f = (E[i]?.[0] ?? '').toString().trim();
           const g = (E[i]?.[1] ?? '').toString().trim();
           if (!f && !g) continue;
-
           const block = document.createElement('div'); block.style.padding='8px 0';
           const idx = document.createElement('div'); idx.className = 'bold'; idx.textContent = f;
           const txt = document.createElement('div'); txt.className = 'italic wrap'; txt.textContent = g;
           block.appendChild(idx); block.appendChild(txt); rb.appendChild(block);
         }
-
       }catch(err){
-        const p=document.createElement('p'); p.className='warn';
-        p.textContent = `No se pudo leer el reglamento: ${err.message}`;
+        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el reglamento: ${err.message}`;
         card.appendChild(p);
       }
     }
 
-    // =============================
-    // Torneo (Apertura/Clausura)
-    // =============================
     async function renderRanking(which){
       view.innerHTML='';
       const cfg = CFG[which];
       const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', `gid: ${cfg.gid}`);
       view.appendChild(card);
       try{
-        const res = await fetch(gvizUrl(cfg.gid)); // sin rango => mantenemos headers por defecto
+        const res = await fetch(gvizUrl(cfg.gid));
         const txt = await res.text();
         const data = parseGviz(txt);
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
         let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
-
-        // Recorte determinístico
         const norm = (h) => (h || '').toString().trim().toLowerCase();
         const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
         const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
@@ -306,15 +279,12 @@
         const useIdx = (lastKeep >= 0)
           ? Array.from({ length: lastKeep + 1 }, (_, i) => i)
           : Array.from({ length: cols.length }, (_, i) => i);
-
         cols = useIdx.map(i => cols[i]);
         const prunedRows = rows.map(r => useIdx.map(i => r[i]));
-
         const table=document.createElement('table');
         const thead=document.createElement('thead'); const trh=document.createElement('tr');
         cols.forEach(h=>{const th=document.createElement('th'); th.textContent=h; trh.appendChild(th);});
         thead.appendChild(trh); table.appendChild(thead);
-
         const tbody=document.createElement('tbody');
         prunedRows.forEach(r=>{
           const tr=document.createElement('tr');
@@ -323,28 +293,4 @@
           }
           tbody.appendChild(tr);
         });
-        table.appendChild(tbody); card.appendChild(table);
-
-        applyConditionalFormatting(table, cols);
-      }catch(err){
-        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el torneo: ${err.message}`; card.appendChild(p);
-      }
-    }
-
-    // =============================
-    // Events
-    // =============================
-    btnReglamento.addEventListener('click', () => renderReglamento());
-    btnTorneo.addEventListener('click', () => renderRanking(selTorneo.value));
-    selTorneo.addEventListener('change', () => renderRanking(selTorneo.value));
-    btnActualizar.addEventListener('click', () => {
-      const active = view.querySelector('.card h2')?.textContent || '';
-      if (/Reglamento/.test(active)) renderReglamento();
-      else renderRanking(selTorneo.value);
-    });
-
-    // Vista inicial
-    renderReglamento();
-  </script>
-</body>
-</html>
+        table.appendChild(tbody);
