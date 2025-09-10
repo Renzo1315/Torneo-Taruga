@@ -214,32 +214,40 @@
           lb.appendChild(t);
         }
 
-        // ---- Cuerpo: desde fila 3 (index 2), columnas B,C,D => (1,2,3)
-        for (let i = 2; i < data.rows.length; i++){
-          const row = data.rows[i] || [];
-          const B = (row[1] ?? '').toString().trim(); // índice Sección/Art.
-          const C = (row[2] ?? '').toString().trim(); // inciso/numeral
-          const D = (row[3] ?? '').toString().trim(); // contenido
+		// ---- Cuerpo: desde fila 2 (index 1) para no saltar la primera sección,
+		// columnas B,C,D => (1,2,3)
+		for (let i = 1; i < data.rows.length; i++){
+		  const row = data.rows[i] || [];
+		  const B = (row[1] ?? '').toString().trim(); // índice Sección/Art.
+		  const C = (row[2] ?? '').toString().trim(); // inciso/numeral
+		  const D = (row[3] ?? '').toString().trim(); // contenido
 
-          if (!B && !C && !D) { continue; }
+		  if (!B && !C && !D) { continue; }
 
-          // Si D inicia con "Sección" => título de sección
-          if (/^Sección\b/i.test(D)) {
-            const sec = document.createElement('div');
-            sec.className = 'reg-sec-title';
-            sec.textContent = D;
-            lb.appendChild(sec);
-            continue;
-          }
+		  // Si D inicia con "Sección" => mostrar índice (B/C) en negrita a la izquierda
+		  // y el título grande al centro (como en tu hoja).
+		  if (/^Sección\b/i.test(D)) {
+			const rowSec = document.createElement('div'); rowSec.className='reg-row';
+			const idx = document.createElement('div'); idx.className='idx';
+			idx.textContent = [B, C].filter(Boolean).join(' ');
+			const title = document.createElement('div'); title.className='reg-sec-title';
+			title.style.margin = '0'; // el contenedor ya aporta el espaciado
+			title.textContent = D;
+			rowSec.appendChild(idx);
+			rowSec.appendChild(title);
+			lb.appendChild(rowSec);
+			continue;
+		  }
 
-          // Fila normal (índice en negrita + contenido en itálica con wrap)
-          const item = document.createElement('div'); item.className = 'reg-row';
-          const idx = document.createElement('div'); idx.className = 'idx';
-          idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
-          const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
-          txtDiv.textContent = D;
-          item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
-        }
+		  // Artículo / párrafo normal: índice (B/C) en negrita + texto en itálica con wrap
+		  const item = document.createElement('div'); item.className = 'reg-row';
+		  const idx = document.createElement('div'); idx.className = 'idx';
+		  idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
+		  const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
+		  txtDiv.textContent = D;
+		  item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
+		}
+
 
         // ---- Enmiendas
         // Título: F1
