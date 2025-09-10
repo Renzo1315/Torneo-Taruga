@@ -31,7 +31,7 @@
     .warn{padding:12px 16px;color:#ffd7d7}
     .score{font-weight:800;border-left:3px solid #22314f}
 
-    /* Reglamento nuevo esquema */
+    /* Reglamento (nuevo esquema plano) */
     .reg-title{font-size:22px;font-weight:900;text-align:center;margin:6px 0 10px}
     .reg-sec-title{font-size:18px;font-weight:800;margin:12px 0 6px;text-align:center}
     .reg-row{display:grid;grid-template-columns:140px 1fr;gap:12px;padding:6px 0}
@@ -82,8 +82,16 @@
     const btnActualizar = document.getElementById('btnActualizar');
     const selTorneo = document.getElementById('selTorneo');
 
-    function gvizUrl(gid){
-      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}&cacheBust=${Date.now()}`;
+    function gvizUrl(gid, rangeA1){
+      const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+      const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}` : '';
+      return `${base}${r}&cacheBust=${Date.now()}`;
+    }
+
+    async function fetchRange(gid, rangeA1){
+      const res = await fetch(gvizUrl(gid, rangeA1));
+      const txt = await res.text();
+      return parseGviz(txt);
     }
 
     function parseGviz(text){
@@ -186,11 +194,12 @@
     }
 
     // =============================
-    // Reglamento (nuevo esquema)
+    // Reglamento (forzando rangos A1)
     // =============================
     async function renderReglamento(){
       view.innerHTML='';
       const gid = CFG.reglamento.gid;
+
       const card = makeCard('Reglamento', `gid: ${gid}`);
       const wrap = document.createElement('div'); wrap.className='two-col';
 
@@ -205,72 +214,70 @@
       card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right); view.appendChild(card);
 
       try{
-        const res = await fetch(gvizUrl(gid)); const txt = await res.text(); const data = parseGviz(txt);
+        // Reglamento: B1:K500 (B1 título; filas desde 2: B,C,D)
+        const regl = await fetchRange(gid, 'B1:K500');
+        const R = regl.rows; // relativas al rango: B=0, C=1, D=2
 
-        // ---- Título del reglamento: B1
-        const title = (data.rows[0]?.[1] ?? '').toString().trim(); // fila 0, col 1 (B1)
-        if (title) {
-          const t = document.createElement('div'); t.className='reg-title'; t.textContent = title;
+        // Título (B1)
+        const titulo = (R[0]?.[0] ?? '').toString().trim();
+        if (titulo){
+          const t = document.createElement('div'); t.className='reg-title'; t.textContent = titulo;
           lb.appendChild(t);
         }
 
-		// ---- Cuerpo: desde fila 2 (index 1) para no saltar la primera sección,
-		// columnas B,C,D => (1,2,3)
-		for (let i = 1; i < data.rows.length; i++){
-		  const row = data.rows[i] || [];
-		  const B = (row[1] ?? '').toString().trim(); // índice Sección/Art.
-		  const C = (row[2] ?? '').toString().trim(); // inciso/numeral
-		  const D = (row[3] ?? '').toString().trim(); // contenido
+        // Cuerpo: desde fila 2 (index 1)
+        for (let i = 1; i < R.length; i++){
+          const r = R[i] || [];
+          const B = (r[0] ?? '').toString().trim(); // índice Sección/Art.
+          const C = (r[1] ?? '').toString().trim(); // inciso/numeral
+          const D = (r[2] ?? '').toString().trim(); // contenido
 
-		  if (!B && !C && !D) { continue; }
+          if (!B && !C && !D) continue;
 
-		  // Si D inicia con "Sección" => mostrar índice (B/C) en negrita a la izquierda
-		  // y el título grande al centro (como en tu hoja).
-		  if (/^Sección\b/i.test(D)) {
-			const rowSec = document.createElement('div'); rowSec.className='reg-row';
-			const idx = document.createElement('div'); idx.className='idx';
-			idx.textContent = [B, C].filter(Boolean).join(' ');
-			const title = document.createElement('div'); title.className='reg-sec-title';
-			title.style.margin = '0'; // el contenedor ya aporta el espaciado
-			title.textContent = D;
-			rowSec.appendChild(idx);
-			rowSec.appendChild(title);
-			lb.appendChild(rowSec);
-			continue;
-		  }
+          if (/^Sección\b/i.test(D)) {
+            const rowSec = document.createElement('div'); rowSec.className='reg-row';
+            const idx = document.createElement('div'); idx.className='idx';
+            idx.textContent = [B, C].filter(Boolean).join(' ');
+            const title = document.createElement('div'); title.className='reg-sec-title';
+            title.style.margin='0';
+            title.textContent = D;
+            rowSec.appendChild(idx); rowSec.appendChild(title);
+            lb.appendChild(rowSec);
+            continue;
+          }
 
-		  // Artículo / párrafo normal: índice (B/C) en negrita + texto en itálica con wrap
-		  const item = document.createElement('div'); item.className = 'reg-row';
-		  const idx = document.createElement('div'); idx.className = 'idx';
-		  idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
-		  const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
-		  txtDiv.textContent = D;
-		  item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
-		}
+          const item = document.createElement('div'); item.className = 'reg-row';
+          const idx = document.createElement('div'); idx.className = 'idx';
+          idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
+          const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
+          txtDiv.textContent = D;
+          item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
+        }
 
+        // Enmiendas: F1:G100 (F1 título; F/G desde fila 2)
+        const enm = await fetchRange(gid, 'F1:G100');
+        const E = enm.rows; // F=0, G=1
 
-        // ---- Enmiendas
-        // Título: F1
-        const enTitle = (data.rows[0]?.[5] ?? '').toString().trim(); // col 5 = F
-        if (enTitle) {
+        const enTitle = (E[0]?.[0] ?? '').toString().trim();
+        if (enTitle){
           const t2 = document.createElement('div'); t2.className='reg-sec-title'; t2.textContent = enTitle;
           rb.appendChild(t2);
         }
+        for (let i=1; i<E.length; i++){
+          const f = (E[i]?.[0] ?? '').toString().trim();
+          const g = (E[i]?.[1] ?? '').toString().trim();
+          if (!f && !g) continue;
 
-        // Ítems: desde fila 2 (index 1), columnas F (5) y G (6)
-        for (let i = 1; i < data.rows.length; i++){
-          const row = data.rows[i] || [];
-          const F = (row[5] ?? '').toString().trim(); // índice enmienda (bold)
-          const G = (row[6] ?? '').toString().trim(); // contenido (italic wrap)
-          if (!F && !G) continue;
-
-          const block = document.createElement('div'); block.style.padding = '8px 0';
-          const idx = document.createElement('div'); idx.className = 'bold'; idx.textContent = F;
-          const txt = document.createElement('div'); txt.className = 'italic wrap'; txt.textContent = G;
+          const block = document.createElement('div'); block.style.padding='8px 0';
+          const idx = document.createElement('div'); idx.className = 'bold'; idx.textContent = f;
+          const txt = document.createElement('div'); txt.className = 'italic wrap'; txt.textContent = g;
           block.appendChild(idx); block.appendChild(txt); rb.appendChild(block);
         }
+
       }catch(err){
-        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el reglamento: ${err.message}`; card.appendChild(p);
+        const p=document.createElement('p'); p.className='warn';
+        p.textContent = `No se pudo leer el reglamento: ${err.message}`;
+        card.appendChild(p);
       }
     }
 
@@ -283,11 +290,13 @@
       const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', `gid: ${cfg.gid}`);
       view.appendChild(card);
       try{
-        const res = await fetch(gvizUrl(cfg.gid)); const txt = await res.text(); const data = parseGviz(txt);
+        const res = await fetch(gvizUrl(cfg.gid));
+        const txt = await res.text();
+        const data = parseGviz(txt);
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
         let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
 
-        // Recorte determinístico: Apertura hasta Score; Clausura hasta Cambio Posición (si existe)
+        // Recorte determinístico
         const norm = (h) => (h || '').toString().trim().toLowerCase();
         const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
         const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
