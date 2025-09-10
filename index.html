@@ -28,14 +28,17 @@
     .panel{border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .panel header{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:700}
     .panel .body{padding:8px 12px}
-    .badge{display:inline-block;background:#0e172a;border:1px solid var(--border);padding:4px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
     .warn{padding:12px 16px;color:#ffd7d7}
     .score{font-weight:800;border-left:3px solid #22314f}
 
-    /* Reglamento */
-    .reg-sec-title{font-size:18px;font-weight:800;margin:10px 0 4px;text-align:center}
-    .reg-art{display:grid;grid-template-columns:140px 1fr;gap:10px;padding:6px 0}
-    .reg-art .t{font-style:italic;text-align:center;line-height:1.45}
+    /* Reglamento nuevo esquema */
+    .reg-title{font-size:22px;font-weight:900;text-align:center;margin:6px 0 10px}
+    .reg-sec-title{font-size:18px;font-weight:800;margin:12px 0 6px;text-align:center}
+    .reg-row{display:grid;grid-template-columns:140px 1fr;gap:12px;padding:6px 0}
+    .reg-row .idx{font-weight:700}
+    .wrap{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;line-height:1.45}
+    .italic{font-style:italic}
+    .bold{font-weight:800}
   </style>
 </head>
 <body>
@@ -65,21 +68,9 @@
     const SHEET_ID = "1_fruD9zPdXhiWcP_wuuryIFHmxLQBlYHDM9CyY0_1s4";
 
     const CFG = {
-      reglamento: {
-        gid: "406827875",
-        left:  { startCol: 1, endCol: 10, startRow: 0, endRow: 500 }, // B..K, filas 1..500 (dinámico)
-        right: { startCol: 12, endCol: 21, startRow: 0, endRow: 50 }  // M..V, filas 1..50
-      },
-      apertura: {
-        gid: "888277887",
-        // A..J (Score en J). Filas dinámicas.
-        range: { startCol: 0, endCol: 9, startRow: 0, endRow: null }
-      },
-      clausura: {
-        gid: "62379087",
-        // A..K (Cambio Posición en K). Filas dinámicas.
-        range: { startCol: 0, endCol: 10, startRow: 0, endRow: null }
-      }
+      reglamento: { gid: "406827875" },
+      apertura:   { gid: "888277887", range: { startCol:0, endCol:9,  startRow:0, endRow:null } },  // A..J
+      clausura:   { gid: "62379087",  range: { startCol:0, endCol:10, startRow:0, endRow:null } }   // A..K
     };
 
     // =============================
@@ -113,7 +104,6 @@
       const colCount = rows[0]?.length ?? 0;
       const rowCount = rows.length;
       const eCol = endCol == null ? (colCount ? colCount-1 : 0) : Math.min(endCol, Math.max(0,colCount-1));
-      // Detectar última fila con datos si endRow es null
       let eRow = rowCount-1;
       if (endRow != null) eRow = Math.min(endRow, Math.max(0,rowCount-1));
       else {
@@ -144,22 +134,19 @@
       const idxCPos  = names.findIndex(h => h.indexOf('cambioposición') !== -1 || h.indexOf('cambioposicion') !== -1);
 
       table.querySelectorAll('tbody tr').forEach(tr => {
-        // Normalizar / redondear
         if (idxScore !== -1) {
           const td = tr.children[idxScore];
           const n = parseFloat(String(td.textContent).replace(',', '.'));
-          if (!isNaN(n)) td.textContent = n.toFixed(2); // 2 decimales
+          if (!isNaN(n)) td.textContent = n.toFixed(2);
         }
         if (idxWin !== -1) {
           const td = tr.children[idxWin];
           let n = parseFloat(String(td.textContent).replace('%','').replace(',', '.'));
           if (!isNaN(n)) {
-            if (n <= 1) n = n * 100;        // si llegó 0..1 => %
+            if (n <= 1) n = n * 100;
             td.textContent = n.toFixed(2) + '%';
           }
         }
-
-        // Score con límites inclusivos (≥)
         if (idxScore !== -1){
           const td = tr.children[idxScore];
           const n = parseFloat(String(td.textContent).replace(',', '.'));
@@ -178,25 +165,16 @@
           }
           if (bg){ td.style.background = bg; td.style.color = fg; td.classList.add('score'); }
         }
-
-        // Cambios (flechas y 0) — Ganadas normal / Perdidas invertido
         const paintCambio = (cell, invert=false) => {
           const t = (cell.textContent||'').trim();
-          if (t === '0') { cell.style.color = '#42A5F5'; return; } // azul
+          if (t === '0') { cell.style.color = '#42A5F5'; return; }
           const up = t.indexOf('▲') !== -1;
           const down = t.indexOf('▼') !== -1;
-          if (!invert) {
-            if (up) cell.style.color = '#2E7D32';
-            if (down) cell.style.color = '#C62828';
-          } else {
-            if (up) cell.style.color = '#C62828';
-            if (down) cell.style.color = '#2E7D32';
-          }
+          if (!invert) { if (up) cell.style.color = '#2E7D32'; if (down) cell.style.color = '#C62828'; }
+          else { if (up) cell.style.color = '#C62828'; if (down) cell.style.color = '#2E7D32'; }
         };
-        if (idxCGan !== -1) paintCambio(tr.children[idxCGan], false);  // Ganadas
-        if (idxCPer !== -1) paintCambio(tr.children[idxCPer], true);   // Perdidas
-
-        // Cambio Posición (solo clausura)
+        if (idxCGan !== -1) paintCambio(tr.children[idxCGan], false);
+        if (idxCPer !== -1) paintCambio(tr.children[idxCPer], true);
         if (idxCPos !== -1){
           const td = tr.children[idxCPos];
           const t = (td.textContent||'').trim();
@@ -208,109 +186,82 @@
     }
 
     // =============================
-    // Reglamento (B..K y M..V)
+    // Reglamento (nuevo esquema)
     // =============================
     async function renderReglamento(){
       view.innerHTML='';
-
-      // Rango amplio para cubrir nuevos artículos en el futuro
-      const cfg = {
-        gid: "406827875",
-        left:  { startCol: 1, endCol: 10, startRow: 0, endRow: 500 }, // B..K, filas 1..500
-        right: { startCol: 12, endCol: 21, startRow: 0, endRow: 50 }  // M..V, filas 1..50
-      };
-
-      const card = makeCard('Reglamento', `gid: ${cfg.gid}`);
+      const gid = CFG.reglamento.gid;
+      const card = makeCard('Reglamento', `gid: ${gid}`);
       const wrap = document.createElement('div'); wrap.className='two-col';
 
-      // Panel izquierdo (Reglamento)
       const left = document.createElement('div'); left.className='panel';
       left.appendChild(Object.assign(document.createElement('header'),{textContent:'Reglamento'}));
       const lb=document.createElement('div'); lb.className='body'; left.appendChild(lb);
 
-      // Panel derecho (Enmiendas)
       const right = document.createElement('div'); right.className='panel';
       right.appendChild(Object.assign(document.createElement('header'),{textContent:'Enmiendas'}));
       const rb=document.createElement('div'); rb.className='body'; right.appendChild(rb);
 
       card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right); view.appendChild(card);
 
-      try {
-        const res = await fetch(gvizUrl(cfg.gid)); const txt = await res.text(); const data = parseGviz(txt);
+      try{
+        const res = await fetch(gvizUrl(gid)); const txt = await res.text(); const data = parseGviz(txt);
 
-        // ==== REGLAMENTO (B..K) ====
-        const L = sliceRange(data.rows, cfg.left);
-        // unir D..K (índices 2..10 relativos al rango B..K)
-        const joinDK = (row) => {
-          const vals = (row || []).slice(2);  // D..K dentro del rango B..K
-          const first = vals.find(v => String(v||'').trim() !== '');
-          return (first ?? vals.join(' ')).toString().trim();
-        };
+        // ---- Título del reglamento: B1
+        const title = (data.rows[0]?.[1] ?? '').toString().trim(); // fila 0, col 1 (B1)
+        if (title) {
+          const t = document.createElement('div'); t.className='reg-title'; t.textContent = title;
+          lb.appendChild(t);
+        }
 
-        for (let i=0;i<L.length;i++){
-          const r = L[i] || [];
-          const B = r[0] ? String(r[0]).trim() : '';    // índice/“Sección”/“Art.” (B)
-          const C = r[1] ? String(r[1]).trim() : '';    // inciso (C)
-          const txtDK = joinDK(r);                      // texto/título (D..K)
+        // ---- Cuerpo: desde fila 3 (index 2), columnas B,C,D => (1,2,3)
+        for (let i = 2; i < data.rows.length; i++){
+          const row = data.rows[i] || [];
+          const B = (row[1] ?? '').toString().trim(); // índice Sección/Art.
+          const C = (row[2] ?? '').toString().trim(); // inciso/numeral
+          const D = (row[3] ?? '').toString().trim(); // contenido
 
-          const emptyRow = (!B && !C && !txtDK);
-          if (emptyRow) {
-            const spacer = document.createElement('div');
-            spacer.style.height='6px';
-            lb.appendChild(spacer);
+          if (!B && !C && !D) { continue; }
+
+          // Si D inicia con "Sección" => título de sección
+          if (/^Sección\b/i.test(D)) {
+            const sec = document.createElement('div');
+            sec.className = 'reg-sec-title';
+            sec.textContent = D;
+            lb.appendChild(sec);
             continue;
           }
 
-          const isSeccion  = /^secci[óo]n\b/i.test(B) || /^secci[óo]n\b/i.test(C);
-          const isArticulo = /^art\.?/i.test(B) || /^art\.?/i.test(C);
-
-          if (isSeccion) {
-            // Título de sección: nombre (D..K) centrado, grande y bold
-            const title = document.createElement('div');
-            title.className='reg-sec-title';
-            title.textContent = txtDK || (B || C);
-            lb.appendChild(title);
-          } else if (isArticulo || txtDK) {
-            // Fila de artículo (índice B/C + texto D..K en itálica)
-            const row = document.createElement('div'); row.className='reg-art';
-            const idx = document.createElement('div');
-            const idxText = [B, C].filter(Boolean).join(' ').trim();
-            idx.innerHTML = idxText ? `<strong>${idxText}</strong>` : '&nbsp;';
-            const t = document.createElement('div'); t.className='t'; t.textContent = txtDK;
-            row.appendChild(idx); row.appendChild(t); lb.appendChild(row);
-          }
+          // Fila normal (índice en negrita + contenido en itálica con wrap)
+          const item = document.createElement('div'); item.className = 'reg-row';
+          const idx = document.createElement('div'); idx.className = 'idx';
+          idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
+          const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
+          txtDiv.textContent = D;
+          item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
         }
 
-        // ==== ENMIENDAS (M..V) ====
-        const R = sliceRange(data.rows, cfg.right);
-        if (R.length){
-          // Título (fila 1 suele tener “Enmiendas”)
-          const titleRow = R[0] || [];
-          const titleText = titleRow.slice(0).find(v => String(v||'').trim() !== '');
-          if (titleText && /enmiendas/i.test(String(titleText))) {
-            const tt = document.createElement('div');
-            tt.className = 'reg-sec-title';
-            tt.textContent = String(titleText);
-            rb.appendChild(tt);
-          }
-          // Enmiendas desde fila 2
-          for (let i=1;i<R.length;i++){
-            const r = R[i] || [];
-            const M = r[0] ? String(r[0]).trim() : '';      // M
-            const N = r[1] ? String(r[1]).trim() : '';      // N
-            const texto = (r.slice(2).find(v => String(v||'').trim() !== '') || r.slice(2).join(' ')).toString().trim(); // O..V
-            const empty = (!M && !N && !texto);
-            if (empty) continue;
-
-            const item = document.createElement('div'); item.style.padding='8px 0';
-            item.innerHTML = `
-              <div><strong>${[M,N].filter(Boolean).join(' ')}</strong></div>
-              <div>${texto}</div>
-            `;
-            rb.appendChild(item);
-          }
+        // ---- Enmiendas
+        // Título: F1
+        const enTitle = (data.rows[0]?.[5] ?? '').toString().trim(); // col 5 = F
+        if (enTitle) {
+          const t2 = document.createElement('div'); t2.className='reg-sec-title'; t2.textContent = enTitle;
+          rb.appendChild(t2);
         }
-      } catch (err) {
+
+        // Ítems: desde fila 2 (index 1), columnas F (5) y G (6)
+        for (let i = 1; i < data.rows.length; i++){
+          const row = data.rows[i] || [];
+          const F = (row[5] ?? '').toString().trim(); // índice enmienda (bold)
+          const G = (row[6] ?? '').toString().trim(); // contenido (italic wrap)
+          if (!F && !G) continue;
+
+          const block = document.createElement('div'); block.style.padding = '8px 0';
+          const idx = document.createElement('div'); idx.className = 'bold'; idx.textContent = F;
+          const txt = document.createElement('div'); txt.className = 'italic wrap'; txt.textContent = G;
+          block.appendChild(idx); block.appendChild(txt); rb.appendChild(block);
+        }
+      }catch(err){
         const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el reglamento: ${err.message}`; card.appendChild(p);
       }
     }
@@ -328,13 +279,12 @@
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
         let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
 
-        // ==== RECORTE DETERMINÍSTICO POR ENCABEZADOS ====
+        // Recorte determinístico: Apertura hasta Score; Clausura hasta Cambio Posición (si existe)
         const norm = (h) => (h || '').toString().trim().toLowerCase();
         const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
         const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
-        let lastKeep = scoreIdx;                                   // Apertura: hasta Score
-        if (which === 'clausura' && cambioPosIdx !== -1)           // Clausura: hasta Cambio Posición si existe
-          lastKeep = Math.max(scoreIdx, cambioPosIdx);
+        let lastKeep = scoreIdx;
+        if (which === 'clausura' && cambioPosIdx !== -1) lastKeep = Math.max(scoreIdx, cambioPosIdx);
         const useIdx = (lastKeep >= 0)
           ? Array.from({ length: lastKeep + 1 }, (_, i) => i)
           : Array.from({ length: cols.length }, (_, i) => i);
@@ -342,7 +292,6 @@
         cols = useIdx.map(i => cols[i]);
         const prunedRows = rows.map(r => useIdx.map(i => r[i]));
 
-        // ==== TABLA ====
         const table=document.createElement('table');
         const thead=document.createElement('thead'); const trh=document.createElement('tr');
         cols.forEach(h=>{const th=document.createElement('th'); th.textContent=h; trh.appendChild(th);});
@@ -358,7 +307,6 @@
         });
         table.appendChild(tbody); card.appendChild(table);
 
-        // Formatos / redondeos / colores
         applyConditionalFormatting(table, cols);
       }catch(err){
         const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el torneo: ${err.message}`; card.appendChild(p);
