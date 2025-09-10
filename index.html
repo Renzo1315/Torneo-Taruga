@@ -31,7 +31,7 @@
     .warn{padding:12px 16px;color:#ffd7d7}
     .score{font-weight:800;border-left:3px solid #22314f}
 
-    /* Reglamento (nuevo esquema plano) */
+    /* Reglamento (esquema plano) */
     .reg-title{font-size:22px;font-weight:900;text-align:center;margin:6px 0 10px}
     .reg-sec-title{font-size:18px;font-weight:800;margin:12px 0 6px;text-align:center}
     .reg-row{display:grid;grid-template-columns:140px 1fr;gap:12px;padding:6px 0}
@@ -82,9 +82,10 @@
     const btnActualizar = document.getElementById('btnActualizar');
     const selTorneo = document.getElementById('selTorneo');
 
+    // Si se pasa rangeA1 => añadimos headers=0 para que NO infiera encabezados y NO salte filas
     function gvizUrl(gid, rangeA1){
       const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
-      const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}` : '';
+      const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}&headers=0` : '';
       return `${base}${r}&cacheBust=${Date.now()}`;
     }
 
@@ -194,7 +195,7 @@
     }
 
     // =============================
-    // Reglamento (forzando rangos A1)
+    // Reglamento (forzando rangos A1 + headers=0)
     // =============================
     async function renderReglamento(){
       view.innerHTML='';
@@ -214,9 +215,9 @@
       card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right); view.appendChild(card);
 
       try{
-        // Reglamento: B1:K500 (B1 título; filas desde 2: B,C,D)
-        const regl = await fetchRange(gid, 'B1:K500');
-        const R = regl.rows; // relativas al rango: B=0, C=1, D=2
+        // Reglamento: B1:D500 (B1 título; desde fila 2 => B,C,D)
+        const regl = await fetchRange(gid, 'B1:D500');
+        const R = regl.rows; // Relativo al rango: B=0, C=1, D=2
 
         // Título (B1)
         const titulo = (R[0]?.[0] ?? '').toString().trim();
@@ -290,7 +291,7 @@
       const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', `gid: ${cfg.gid}`);
       view.appendChild(card);
       try{
-        const res = await fetch(gvizUrl(cfg.gid));
+        const res = await fetch(gvizUrl(cfg.gid)); // sin rango => mantenemos headers por defecto
         const txt = await res.text();
         const data = parseGviz(txt);
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
