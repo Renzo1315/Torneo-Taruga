@@ -38,6 +38,9 @@
     .wrap{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;line-height:1.45}
     .italic{font-style:italic}
     .bold{font-weight:800}
+
+    /* Iconos podio */
+    .podio-icon{ width:28px; height:28px; object-fit:contain; display:inline-block }
   </style>
 </head>
 <body>
@@ -68,8 +71,15 @@
 
     const CFG = {
       reglamento: { gid: "406827875" },
-      apertura:   { gid: "888277887", range: { startCol:0, endCol:9,  startRow:0, endRow:null } },  // A..J
-      clausura:   { gid: "62379087",  range: { startCol:0, endCol:10, startRow:0, endRow:null } }   // A..K
+      apertura:   { gid: "888277887", range: { startCol:0, endCol:9,  startRow:0, endRow:null } },
+      clausura:   { gid: "62379087",  range: { startCol:0, endCol:10, startRow:0, endRow:null } }
+    };
+
+    // GIFs de podio
+    const PODIO_GIFS = {
+      "1": { src: "https://drive.google.com/uc?export=view&id=1HXN4Qw72s0hnweKJhfSAjZMolZ_8DvsV", title: "🥇 Campeón anterior" },
+      "2": { src: "https://drive.google.com/uc?export=view&id=1GdwLSU2qeOpA664r2fb1UUypmXfKPF3v", title: "🥈 Subcampeón anterior" },
+      "3": { src: "https://drive.google.com/uc?export=view&id=11296-D02uSO3SZpZOlNa5lKpOyJobe0T", title: "🥉 Tercer puesto anterior" }
     };
 
     // =============================
@@ -81,16 +91,9 @@
     const btnActualizar = document.getElementById('btnActualizar');
     const selTorneo = document.getElementById('selTorneo');
 
-    // GViz URL (JSON) – rápido para toda la tabla
     function gvizUrl(gid, rangeA1){
       const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
       const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}&headers=0` : '';
-      return `${base}${r}&cacheBust=${Date.now()}`;
-    }
-    // CSV URL (valores mostrados) – lo uso SOLO en las 2 columnas de cambios
-    function csvUrl(gid, rangeA1){
-      const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
-      const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}` : '';
       return `${base}${r}&cacheBust=${Date.now()}`;
     }
 
@@ -100,22 +103,11 @@
       return parseGviz(txt);
     }
 
-    // preferimos c.f (formateado) cuando exista; si no, c.v
     function parseGviz(text){
       const start = text.indexOf('{'); const end = text.lastIndexOf('}');
-      if (start === -1 || end === -1) throw new Error('Respuesta GViz inválida');
       const json = JSON.parse(text.slice(start, end + 1));
-      if (json.status && json.status !== 'ok') {
-        const det = json.errors && json.errors[0] ? `${json.errors[0].message}: ${json.errors[0].detailed_message || ''}` : 'Error GViz';
-        throw new Error(det);
-      }
       const cols = (json.table?.cols || []).map(c => c.label || c.id || "");
-      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => {
-        if (!c) return "";
-        const f = (c.f ?? null);
-        const v = (c.v ?? "");
-        return String(f !== null ? f : v);
-      }));
+      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => c ? (c.f ?? c.v ?? "") : ""));
       return { cols, rows };
     }
 
@@ -140,128 +132,19 @@
       card.appendChild(head); return card;
     }
 
-    // =============================
-    // Utilidades CSV para rehidratar columnas
-    // =============================
-    const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    function colToA1(colIndex0){ // 0->A, 1->B, ...
-      let n = colIndex0 + 1, s = "";
-      while (n > 0){ const r = (n - 1) % 26; s = ABC[r] + s; n = Math.floor((n - 1) / 26); }
-      return s;
-    }
-    async function fetchCsvColumn(gid, colIndex0){
-      // Tomo toda la columna como D:D (sin fin), más simple y robusto
-      const colA1 = colToA1(colIndex0);
-      const url = csvUrl(gid, `${colA1}:${colA1}`);
-      const txt = await fetch(url).then(r => r.text());
-      // CSV de una columna → cada línea es una celda. La primera es el header.
-      return txt.replace(/\r/g,'').split('\n');
-    }
-    async function hydrateChangeColumnsFromCSV(table, cols, gid){
-      const norm = s => (s||'').toLowerCase().replace(/\s+/g,'');
-      const idxCGan = cols.findIndex(h => norm(h).includes('cambiopartidasganadas'));
-      const idxCPer = cols.findIndex(h => norm(h).includes('cambiopartidasperdidas'));
-      if (idxCGan === -1 && idxCPer === -1) return;
-
-      // Cargo ambas columnas (si existen) desde CSV (valores mostrados = incluye ▲/▼)
-      const [csvGan, csvPer] = await Promise.all([
-        idxCGan !== -1 ? fetchCsvColumn(gid, idxCGan) : Promise.resolve(null),
-        idxCPer !== -1 ? fetchCsvColumn(gid, idxCPer) : Promise.resolve(null)
-      ]);
-
-      const tbody = table.querySelector('tbody');
-      const trs = [...tbody.querySelectorAll('tr')];
-
-      // Reemplazo el texto por lo que vino en CSV (saltando la fila del header → índice 0)
-      trs.forEach((tr, i) => {
-        const csvRowIdx = i + 1; // porque csv[0] es la cabecera
-        if (idxCGan !== -1 && csvGan && csvGan[csvRowIdx] !== undefined) {
-          const v = (csvGan[csvRowIdx] ?? '').trim();
-          if (v !== '') tr.children[idxCGan].textContent = v;
-        }
-        if (idxCPer !== -1 && csvPer && csvPer[csvRowIdx] !== undefined) {
-          const v = (csvPer[csvRowIdx] ?? '').trim();
-          if (v !== '') tr.children[idxCPer].textContent = v;
-        }
-      });
-    }
-
-    // =============================
-    // Formatos condicionales y normalizaciones (Torneo)
-    // =============================
-    function applyConditionalFormatting(table, cols){
-      const norm = s => (s||'').toLowerCase().replace(/\s+/g,'');
-      const names = cols.map(norm);
-
-      const idxScore = names.findIndex(h => h.includes('score'));
-      const idxWin   = names.findIndex(h => h.includes('winrate'));
-      const idxCGan  = names.findIndex(h => h.includes('cambiopartidasganadas'));
-      const idxCPer  = names.findIndex(h => h.includes('cambiopartidasperdidas'));
-      const idxCPos  = names.findIndex(h => h.includes('cambioposición') || h.includes('cambioposicion'));
-
-      const toTriangleIfNumber = (cell) => {
-        const raw = (cell.textContent || '').trim();
-        if (/[▲▼]/.test(raw)) return; // ya viene con símbolo
-        const n = parseFloat(raw.replace(',', '.'));
-        if (isNaN(n)) return;
-        if (n > 0) cell.textContent = `▲ ${Math.abs(n)}`;
-        else if (n < 0) cell.textContent = `▼ ${Math.abs(n)}`;
-        else cell.textContent = '0';
-      };
-
-      const paintCambio = (cell, invert=false) => {
-        const t = (cell.textContent||'').trim();
-        if (t === '0' || t === '') { cell.style.color = '#42A5F5'; return; }
-        const up = t.includes('▲');
-        const down = t.includes('▼');
-        if (!invert) { if (up) cell.style.color = '#2E7D32'; if (down) cell.style.color = '#C62828'; }
-        else { if (up) cell.style.color = '#C62828'; if (down) cell.style.color = '#2E7D32'; }
-      };
-
+    // Podio
+    function applyPodioBadges(table, cols){
+      const idxStar = cols.findIndex(h => (h||"").trim() === "*");
+      const colIdx = idxStar >= 0 ? idxStar : 0;
       table.querySelectorAll('tbody tr').forEach(tr => {
-        // Score
-        if (idxScore !== -1) {
-          const td = tr.children[idxScore];
-          const n = parseFloat(String(td.textContent).replace(',', '.'));
-          if (!isNaN(n)) td.textContent = n.toFixed(2);
-
-          let bg=null, fg='#000';
-          if (!isNaN(n)){
-            if (n >= 90) bg = '#00E5FF';
-            else if (n >= 80) bg = '#00E676';
-            else if (n >= 70) bg = '#43A047';
-            else if (n >= 60) bg = '#C5E1A5';
-            else if (n >= 50) bg = '#FFF176';
-            else if (n >= 40) bg = '#FFB74D';
-            else if (n >= 30) bg = '#FB8C00';
-            else if (n >= 20) bg = '#FF3B30';
-            else if (n >= 10) { bg = '#C62828'; fg = '#FFF'; }
-            else { bg = '#000'; fg = '#FFF'; }
-          }
-          if (bg){ td.style.background = bg; td.style.color = fg; td.classList.add('score'); }
-        }
-
-        // Win Rate
-        if (idxWin !== -1) {
-          const td = tr.children[idxWin];
-          let n = parseFloat(String(td.textContent).replace('%','').replace(',', '.'));
-          if (!isNaN(n)) {
-            if (n <= 1) n = n * 100;
-            td.textContent = n.toFixed(2) + '%';
-          }
-        }
-
-        // Cambios de partidas (ajusto símbolo y color)
-        if (idxCGan !== -1) { const td = tr.children[idxCGan]; toTriangleIfNumber(td); paintCambio(td, false); }
-        if (idxCPer !== -1) { const td = tr.children[idxCPer]; toTriangleIfNumber(td); paintCambio(td, true); }
-
-        // Cambio de posición
-        if (idxCPos !== -1){
-          const td = tr.children[idxCPos];
-          const t = (td.textContent||'').trim();
-          if (t === '-') td.style.color = '#42A5F5';
-          else if (t.includes('▲')) td.style.color = '#2E7D32';
-          else if (t.includes('▼')) td.style.color = '#C62828';
+        const td = tr.children[colIdx];
+        if (!td) return;
+        const val = (td.textContent || "").trim();
+        const gif = PODIO_GIFS[val];
+        if (gif){
+          td.innerHTML = `<img class="podio-icon" src="${gif.src}" alt="Podio ${val}" title="${gif.title}">`;
+        } else {
+          td.textContent = "";
         }
       });
     }
@@ -272,62 +155,13 @@
     async function renderReglamento(){
       view.innerHTML='';
       const gid = CFG.reglamento.gid;
-
       const card = makeCard('Reglamento', `gid: ${gid}`);
-      const wrap = document.createElement('div'); wrap.className='two-col';
-
-      const left = document.createElement('div'); left.className='panel';
-      left.appendChild(Object.assign(document.createElement('header'),{textContent:'Reglamento'}));
-      const lb=document.createElement('div'); lb.className='body'; left.appendChild(lb);
-
-      const right = document.createElement('div'); right.className='panel';
-      right.appendChild(Object.assign(document.createElement('header'),{textContent:'Enmiendas'}));
-      const rb=document.createElement('div'); rb.className='body'; right.appendChild(rb);
-
-      card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right); view.appendChild(card);
-
+      view.appendChild(card);
       try{
-        const regl = await fetchRange(gid, 'B1:D500');  // B1 título; desde fila 2 cuerpo
-        const R = regl.rows;
-
-        const titulo = (R[0]?.[0] ?? '').toString().trim();
-        if (titulo){ const t = document.createElement('div'); t.className='reg-title'; t.textContent = titulo; lb.appendChild(t); }
-
-        for (let i = 1; i < R.length; i++){
-          const r = R[i] || [];
-          const B = (r[0] ?? '').toString().trim();
-          const C = (r[1] ?? '').toString().trim();
-          const D = (r[2] ?? '').toString().trim();
-          if (!B && !C && !D) continue;
-
-          if (/^Sección\b/i.test(D)) {
-            const rowSec = document.createElement('div'); rowSec.className='reg-row';
-            const idx = document.createElement('div'); idx.className='idx'; idx.textContent = [B, C].filter(Boolean).join(' ');
-            const title = document.createElement('div'); title.className='reg-sec-title'; title.style.margin='0'; title.textContent = D;
-            rowSec.appendChild(idx); rowSec.appendChild(title); lb.appendChild(rowSec);
-            continue;
-          }
-
-          const item = document.createElement('div'); item.className = 'reg-row';
-          const idx = document.createElement('div'); idx.className = 'idx'; idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
-          const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic'; txtDiv.textContent = D;
-          item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
-        }
-
-        const enm = await fetchRange(gid, 'F1:G100');
-        const E = enm.rows;
-        const enTitle = (E[0]?.[0] ?? '').toString().trim();
-        if (enTitle){ const t2 = document.createElement('div'); t2.className='reg-sec-title'; t2.textContent = enTitle; rb.appendChild(t2); }
-        for (let i=1; i<E.length; i++){
-          const f = (E[i]?.[0] ?? '').toString().trim();
-          const g = (E[i]?.[1] ?? '').toString().trim();
-          if (!f && !g) continue;
-          const block = document.createElement('div'); block.style.padding='8px 0';
-          const idx = document.createElement('div'); idx.className = 'bold'; idx.textContent = f;
-          const txt = document.createElement('div'); txt.className = 'italic wrap'; txt.textContent = g;
-          block.appendChild(idx); block.appendChild(txt); rb.appendChild(block);
-        }
-
+        const regl = await fetchRange(gid, 'B1:D500');
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(regl.rows, null, 2);
+        card.appendChild(pre);
       }catch(err){
         const p=document.createElement('p'); p.className='warn';
         p.textContent = `No se pudo leer el reglamento: ${err.message}`;
@@ -341,54 +175,34 @@
     async function renderRanking(which){
       view.innerHTML='';
       const cfg = CFG[which];
-      const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', `gid: ${cfg.gid}`);
+      // 👇 ahora sin gid
+      const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', '');
       view.appendChild(card);
       try{
-        // 1) Cargar todo con GViz
-        const txt = await fetch(gvizUrl(cfg.gid)).then(r => r.text());
+        const res = await fetch(gvizUrl(cfg.gid));
+        const txt = await res.text();
         const data = parseGviz(txt);
         const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
         let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
 
-        // Mantener hasta la última columna relevante (score/cambios/pos)
-        const norm = (h) => (h || '').toString().trim().toLowerCase();
-        const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
-        const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
-        const cGanIdx      = cols.findIndex(h => /cambio.*partidas.*ganad/i.test(norm(h)));
-        const cPerIdx      = cols.findIndex(h => /cambio.*partidas.*perdi/i.test(norm(h)));
-        const indicesClave = [scoreIdx, cambioPosIdx, cGanIdx, cPerIdx].filter(i => i >= 0);
-        const lastKeep = indicesClave.length ? Math.max(...indicesClave) : (cols.length - 1);
-        const useIdx = Array.from({ length: lastKeep + 1 }, (_, i) => i);
-
-        cols = useIdx.map(i => cols[i]);
-        const prunedRows = rows.map(r => useIdx.map(i => r[i]));
-
-        // 2) Render de la tabla
         const table=document.createElement('table');
         const thead=document.createElement('thead'); const trh=document.createElement('tr');
         cols.forEach(h=>{const th=document.createElement('th'); th.textContent=h; trh.appendChild(th);});
         thead.appendChild(trh); table.appendChild(thead);
 
         const tbody=document.createElement('tbody');
-        prunedRows.forEach(r=>{
+        rows.forEach(r=>{
           const tr=document.createElement('tr');
-          for(let i=0;i<cols.length;i++){
-            const td=document.createElement('td'); td.textContent = r[i] ?? ''; tr.appendChild(td);
-          }
+          cols.forEach((_,i)=>{ const td=document.createElement('td'); td.textContent = r[i] ?? ''; tr.appendChild(td); });
           tbody.appendChild(tr);
         });
         table.appendChild(tbody); card.appendChild(table);
 
-        // 3) Rehidratar SOLO las columnas de cambios desde CSV (trae ▲/▼ visibles)
-        await hydrateChangeColumnsFromCSV(table, cols, cfg.gid);
-
-        // 4) Formatos: porcentaje, score y colores de cambios
-        applyConditionalFormatting(table, cols);
+        // Podio badges
+        applyPodioBadges(table, cols);
 
       }catch(err){
-        const p=document.createElement('p'); p.className='warn';
-        p.textContent = `No se pudo leer el torneo: ${err.message}`;
-        card.appendChild(p);
+        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el torneo: ${err.message}`; card.appendChild(p);
       }
     }
 
@@ -404,7 +218,6 @@
       else renderRanking(selTorneo.value);
     });
 
-    // Vista inicial
     renderReglamento();
   </script>
 </body>
