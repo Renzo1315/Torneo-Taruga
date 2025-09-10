@@ -3,37 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Torneo Taruga</title>
+  <title>Torneo Taruga – Tablas limpias (GViz)</title>
   <style>
-    :root { --bg:#0b1220; --card:#121a2b; --text:#e6eefc; --muted:#8aa0c8; --accent:#4cc9f0; }
+    :root { --bg:#0b1220; --card:#121a2b; --text:#e6eefc; --muted:#8aa0c8; --border:#22314f; --accent:#4cc9f0; }
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Ubuntu,sans-serif;background:var(--bg);color:var(--text)}
-    header{padding:24px 16px;text-align:center;border-bottom:1px solid #22314f}
-    header h1{margin:0;font-weight:700;letter-spacing:.3px}
-    header p{margin:6px 0 0;color:var(--muted)}
+    header{padding:24px 16px;text-align:center;border-bottom:1px solid var(--border)}
+    header h1{margin:0 0 6px;font-weight:800;letter-spacing:.2px}
+    header p{margin:0;color:var(--muted)}
     main{max-width:1200px;margin:0 auto;padding:20px}
-    .controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
-    .btn{background:var(--card);border:1px solid #22314f;color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
+    .controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
+    input[type="search"]{background:#0e172a;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 14px;min-width:280px}
+    .btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
     .btn:hover{border-color:var(--accent)}
     .grid{display:grid;grid-template-columns:1fr;gap:18px}
-    @media (min-width: 900px){.grid{grid-template-columns:1fr 1fr}}
-    .card{background:var(--card);border:1px solid #22314f;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.2)}
-    .card header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:0;border-bottom:1px solid #22314f}
+    @media (min-width: 980px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.18)}
+    .card header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
     .card h2{margin:0;font-size:18px}
     .card small{color:var(--muted)}
     table{width:100%;border-collapse:collapse}
-    th,td{padding:10px 12px;border-bottom:1px solid #22314f;text-align:center}
-    th{position:sticky;top:0;background:#0e172a;font-weight:600}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:center}
+    th{position:sticky;top:0;background:#0e172a;font-weight:700;cursor:pointer}
     tr:nth-child(even) td{background:#0f1a31}
-    .footer{padding:20px;text-align:center;color:var(--muted)}
     .hidden{display:none}
-    input[type="search"]{background:#0e172a;color:var(--text);border:1px solid #22314f;border-radius:10px;padding:8px 12px;min-width:240px}
+    .footer{padding:20px;text-align:center;color:var(--muted)}
+    .warn{padding:12px 16px;color:#ffd7d7}
+    .warn a{color:#ffd7d7;text-decoration:underline}
   </style>
 </head>
 <body>
   <header>
     <h1>Tabla del Torneo Taruga</h1>
-    <p>Datos leídos en vivo desde Google Sheets (solo las hojas que elijas mostrar).</p>
+    <p>Tablas limpias con Google Visualization API (GViz). Debe estar compartido como “Cualquiera con el enlace – Lector”.</p>
   </header>
   <main>
     <div class="controls">
@@ -48,15 +50,16 @@
 
   <script>
     // =============================
-    // 🚧 CONFIGURA AQUI TU PLANILLA
+    // 🚧 CONFIGURACIÓN – EDITA AQUÍ
     // =============================
-    // Usaremos el ID del documento + la lista de GIDs de las hojas a mostrar (tablas limpias con GViz JSON)
+    // ID del documento (entre /d/ y /edit en la URL del Google Sheet original)
     const SHEET_ID = "1_fruD9zPdXhiWcP_wuuryIFHmxLQBlYHDM9CyY0_1s4";
 
+    // Lista de hojas a mostrar (solo las que quieras). Usa sus gid.
     const SHEETS = [
-      { title: "Reglamento", url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pubhtml?gid=406827875&single=true" },
-      { title: "Torneo Apertura 2025", url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pubhtml?gid=888277887&single=true" },
-      { title: "Torneo Clausura 2025", url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJtb3kuifods2fMD9Nji5fNiSEXBibmax0Ux3NW0NNSscBj2_T5wQqILnENXDOm-ZT-ufXoSxuVbWf/pubhtml?gid=62379087&single=true" }
+      { title: "Reglamento", gid: "406827875" },
+      { title: "Torneo Apertura 2025", gid: "888277887" },
+      { title: "Torneo Clausura 2025", gid: "62379087" }
     ];
 
     // =============================
@@ -67,43 +70,23 @@
     const searchEl = document.getElementById('search');
 
     function gvizUrl(gid){
+      // out:json => respuesta como JS envuelto en JSON
       return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
     }
 
-    // Parser GViz JSON envuelto
+    // Parseador del JSON envuelto que devuelve GViz
     function parseGviz(text){
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
+      if (start === -1 || end === -1) throw new Error('Respuesta GViz inválida');
       const json = JSON.parse(text.slice(start, end + 1));
-      const cols = json.table.cols.map(c => c.label || c.id || "");
-      const rows = json.table.rows.map(r => (r.c || []).map(c => (c ? c.v : "")));
-      return { cols, rows };
-    }
-
-    // Parser CSV (por si se usan URLs CSV en el futuro)
-    function parseCSV(text) {
-      const rows = [];
-      let row = [];
-      let cell = '';
-      let inQuotes = false;
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        const next = text[i + 1];
-        if (inQuotes) {
-          if (ch === '"' && next === '"') { cell += '"'; i++; }
-          else if (ch === '"') { inQuotes = false; }
-          else { cell += ch; }
-        } else {
-          if (ch === '"') { inQuotes = true; }
-          else if (ch === ',') { row.push(cell); cell = ''; }
-          else if (ch === '
-' || ch === '') {
-            if (cell !== '' || row.length) { row.push(cell); rows.push(row); row = []; cell = ''; }
-          } else { cell += ch; }
-        }
+      if (json.status && json.status !== 'ok') {
+        const det = json.errors && json.errors[0] ? `${json.errors[0].message}: ${json.errors[0].detailed_message || ''}` : 'Error GViz';
+        throw new Error(det);
       }
-      if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
-      return rows;
+      const cols = (json.table.cols || []).map(c => c.label || c.id || "");
+      const rows = (json.table.rows || []).map(r => (r.c || []).map(c => (c ? c.v : "")));
+      return { cols, rows };
     }
 
     function toTable({cols, rows}){
@@ -113,7 +96,6 @@
       cols.forEach((h, idx) => {
         const th = document.createElement('th');
         th.textContent = h;
-        th.style.cursor = 'pointer';
         th.addEventListener('click', () => sortBy(table, idx));
         trh.appendChild(th);
       });
@@ -135,38 +117,6 @@
       return table;
     }
 
-    function toTableFromCSV(rows){
-      if (!rows.length) return document.createElement('table');
-      const cols = rows[0];
-      const bodyRows = rows.slice(1).filter(r => r.join('').trim() !== '');
-
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      const trh = document.createElement('tr');
-      cols.forEach((h, idx) => {
-        const th = document.createElement('th');
-        th.textContent = h;
-        th.style.cursor = 'pointer';
-        th.addEventListener('click', () => sortBy(table, idx));
-        trh.appendChild(th);
-      });
-      thead.appendChild(trh);
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      bodyRows.forEach(r => {
-        const tr = document.createElement('tr');
-        cols.forEach((_, i) => {
-          const td = document.createElement('td');
-          td.textContent = r[i] ?? '';
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      return table;
-    }
-
     function sortBy(table, colIndex){
       const tbody = table.querySelector('tbody');
       const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -179,9 +129,7 @@
         const bn = parseFloat(bv.replace(/,/g, '.'));
         const aIsNum = !isNaN(an) && av.trim() !== '';
         const bIsNum = !isNaN(bn) && bv.trim() !== '';
-        if(aIsNum && bIsNum){
-          return dir === 'asc' ? an - bn : bn - an;
-        }
+        if(aIsNum && bIsNum){ return dir === 'asc' ? an - bn : bn - an; }
         return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
       });
       tbody.innerHTML = '';
@@ -202,80 +150,35 @@
       });
     }
 
-    async function loadOne(entry){
-      const { title } = entry;
+    async function loadOne({title, gid}){
       const card = document.createElement('article');
       card.className = 'card';
       const head = document.createElement('header');
       const h2 = document.createElement('h2');
       h2.textContent = title;
       const small = document.createElement('small');
+      small.textContent = `gid: ${gid}`;
       head.appendChild(h2);
       head.appendChild(small);
       card.appendChild(head);
 
-      // Helpers de fallback
-      const csvUrl = (gid) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${gid}&single=true&output=csv`;
-      const pubhtmlUrl = (gid) => `https://docs.google.com/spreadsheets/d/e/2PACX-PLACEHOLDER/pubhtml?gid=${gid}&single=true`;
-      // Nota: pubhtmlUrl necesita el ID "/d/e/2PACX-..." del link publicado. Si no lo tenés, nos quedamos con CSV como 2do intento.
-
-      // 1) Intento GViz JSON (requiere que el doc sea accesible con enlace o publicado)
-      if (entry.gid) {
-        try {
-          const res = await fetch(gvizUrl(entry.gid), { cache: 'no-store' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const txt = await res.text();
-          const data = parseGviz(txt);
-          small.textContent = `gid: ${entry.gid}`;
-          card.appendChild(toTable(data));
-          return card;
-        } catch (e) {
-          // 2) Fallback a CSV publicado (si el doc está "Publicar en la web")
-          try {
-            const res2 = await fetch(csvUrl(entry.gid), { cache: 'no-store' });
-            if (!res2.ok) throw new Error(`CSV HTTP ${res2.status}`);
-            const txt2 = await res2.text();
-            const rows = parseCSV(txt2);
-            small.textContent = `gid: ${entry.gid} • CSV`;
-            card.appendChild(toTableFromCSV(rows));
-            return card;
-          } catch (e2) {
-            // 3) Último recurso: mensaje guiando a publicar/compartir
-            const p = document.createElement('p');
-            p.style.padding = '12px 16px';
-            p.innerHTML = `No se pudo leer esta hoja. <br>• Asegurate de que el documento esté <b>Compartir → Cualquiera con el enlace (lector)</b> o <b>Archivo → Compartir → Publicar en la web</b>.<br>• También podés pegar un <b>link pubhtml</b> en la configuración (en lugar de gid) para embeberla en iframe.`;
-            card.appendChild(p);
-            return card;
-          }
-        }
-      }
-
-      // Caso: link publicado como HTML → incrustar en iframe
-      if (entry.url && /\/pubhtml(\?|$)/.test(entry.url)) {
-        const iframe = document.createElement('iframe');
-        const u = new URL(entry.url);
-        u.searchParams.set('widget', 'true');
-        u.searchParams.set('headers', 'false');
-        iframe.src = u.toString();
-        iframe.style.width = '100%';
-        iframe.style.height = '600px';
-        iframe.style.border = '0';
-        card.appendChild(iframe);
-        return card;
-      }
-
-      // Caso: URL CSV publicado explícito
-      if (entry.url) {
-        const res = await fetch(entry.url, { cache: 'no-store' });
+      try {
+        const url = gvizUrl(gid) + `&cacheBust=${Date.now()}`; // evita caché
+        const res = await fetch(url, { cache: 'no-store' });
         const txt = await res.text();
-        const rows = parseCSV(txt);
-        card.appendChild(toTableFromCSV(rows));
-        return card;
+        const data = parseGviz(txt);
+        card.appendChild(toTable(data));
+      } catch (err) {
+        const p = document.createElement('p');
+        p.className = 'warn';
+        p.innerHTML = `No se pudo leer esta hoja. <br><b>Posible causa:</b> permisos. <br>
+          Asegurate en el Google Sheet original de: <br>
+          • Compartir → <b>Cualquier persona con el enlace – Lector</b>, o <br>
+          • Archivo → Compartir → <b>Publicar en la web</b> (la hoja).<br><br>
+          Error: ${err.message}`;
+        card.appendChild(p);
       }
 
-      const p = document.createElement('p');
-      p.textContent = 'Sin fuente configurada para esta hoja.';
-      card.appendChild(p);
       return card;
     }
 
@@ -291,8 +194,6 @@
     searchEl.addEventListener('input', (e)=> filterTables(e.target.value.toLowerCase()));
 
     // Arranque
-    loadAll
-    loadAll()
     loadAll();
   </script>
 </body>
