@@ -3,33 +3,40 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Torneo Taruga – GViz</title>
+  <title>Torneo Taruga</title>
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --text:#e6eefc; --muted:#8aa0c8; --border:#22314f; --accent:#4cc9f0; }
-    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    header{padding:24px 16px 18px;text-align:center;border-bottom:1px solid var(--border)}
-    header h1{margin:0 0 8px;font-weight:800}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Ubuntu,sans-serif;background:var(--bg);color:var(--text)}
+    header{padding:26px 16px 18px;text-align:center;border-bottom:1px solid var(--border)}
+    header h1{margin:0 0 8px;font-weight:800;letter-spacing:.2px}
     main{max-width:1200px;margin:0 auto;padding:18px}
-    .toolbar{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
-    .btn,select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
-    .btn:hover,select:hover{border-color:var(--accent)}
-    select{padding:10px 12px}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:16px;overflow:hidden}
-    .card header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+    .toolbar{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+    .btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
+    .btn:hover{border-color:var(--accent)}
+    select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+    .view{min-height:200px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.18);margin-bottom:16px}
+    .card header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+    .card h2{margin:0;font-size:18px}
+    .card small{color:var(--muted)}
     table{width:100%;border-collapse:collapse}
-    th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:center}
-    th{background:#0e172a;position:sticky;top:0}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:center}
+    th{position:sticky;top:0;background:#0e172a;font-weight:700}
     tr:nth-child(even) td{background:#0f1a31}
     .two-col{display:grid;grid-template-columns:2fr 1.2fr;gap:12px;padding:12px}
     .panel{border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .panel header{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:700}
-    .warn{padding:12px;color:#ffd7d7}
-    .score{font-weight:800}
+    .panel .body{padding:8px 12px}
+    .warn{padding:12px 16px;color:#ffd7d7}
+    .score{font-weight:800;border-left:3px solid #22314f}
+
+    /* Reglamento (esquema plano) */
     .reg-title{font-size:22px;font-weight:900;text-align:center;margin:6px 0 10px}
     .reg-sec-title{font-size:18px;font-weight:800;margin:12px 0 6px;text-align:center}
     .reg-row{display:grid;grid-template-columns:140px 1fr;gap:12px;padding:6px 0}
     .reg-row .idx{font-weight:700}
-    .wrap{white-space:pre-wrap;word-wrap:break-word}
+    .wrap{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;line-height:1.45}
     .italic{font-style:italic}
     .bold{font-weight:800}
   </style>
@@ -39,161 +46,305 @@
     <h1>Torneo Taruga</h1>
     <div class="toolbar">
       <button id="btnReglamento" class="btn">Reglamento</button>
-      <select id="selTorneo"></select>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="btnTorneo" class="btn">Torneo</button>
+        <select id="selTorneo" aria-label="Seleccionar torneo">
+          <option value="apertura">Apertura 2025</option>
+          <option value="clausura">Clausura 2025</option>
+        </select>
+      </div>
       <button id="btnActualizar" class="btn">Actualizar</button>
     </div>
   </header>
-  <main><section id="view"></section></main>
+  <main>
+    <section id="view" class="view"></section>
+    <p style="text-align:center;color:var(--muted)"> © 2025. Oriente Sur • Todos los derechos reservados</p>
+  </main>
 
   <script>
+    // =============================
+    // CONFIG
+    // =============================
     const SHEET_ID = "1_fruD9zPdXhiWcP_wuuryIFHmxLQBlYHDM9CyY0_1s4";
+
     const CFG = {
-      reglamento:{ gid:"406827875" },
-      apertura2025:{ gid:"888277887", range:{startCol:0,endCol:9,startRow:0,endRow:null}, label:"Apertura 2025" },
-      clausura2025:{ gid:"62379087", range:{startCol:0,endCol:10,startRow:0,endRow:null}, label:"Clausura 2025" }
-      // para agregar otro torneo: apertura2026:{ gid:"XXXXX", range:{...}, label:"Apertura 2026" }
+      reglamento: { gid: "406827875" },
+      apertura:   { gid: "888277887", range: { startCol:0, endCol:9,  startRow:0, endRow:null } },  // A..J
+      clausura:   { gid: "62379087",  range: { startCol:0, endCol:10, startRow:0, endRow:null } }   // A..K
     };
 
-    const view=document.getElementById("view");
-    const selTorneo=document.getElementById("selTorneo");
-    const btnReglamento=document.getElementById("btnReglamento");
-    const btnActualizar=document.getElementById("btnActualizar");
+    // =============================
+    // Helpers
+    // =============================
+    const view = document.getElementById('view');
+    const btnReglamento = document.getElementById('btnReglamento');
+    const btnTorneo = document.getElementById('btnTorneo');
+    const btnActualizar = document.getElementById('btnActualizar');
+    const selTorneo = document.getElementById('selTorneo');
 
-    // === GViz helpers ===
+    // Si se pasa rangeA1 => añadimos headers=0 para que NO infiera encabezados y NO salte filas
     function gvizUrl(gid, rangeA1){
-      const base=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
-      const r=rangeA1?`&range=${encodeURIComponent(rangeA1)}&headers=0`:"";
+      const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+      const r = rangeA1 ? `&range=${encodeURIComponent(rangeA1)}&headers=0` : '';
       return `${base}${r}&cacheBust=${Date.now()}`;
     }
+
     async function fetchRange(gid, rangeA1){
-      const res=await fetch(gvizUrl(gid,rangeA1));
-      const txt=await res.text();
+      const res = await fetch(gvizUrl(gid, rangeA1));
+      const txt = await res.text();
       return parseGviz(txt);
     }
+
     function parseGviz(text){
-      const start=text.indexOf("{"), end=text.lastIndexOf("}");
-      const json=JSON.parse(text.slice(start,end+1));
-      const cols=(json.table?.cols||[]).map(c=>c.label||c.id||"");
-      const rows=(json.table?.rows||[]).map(r=>
-        (r.c||[]).map(c=>{
-          if(!c) return "";
-          if(c.f!==undefined && c.f!==null) return c.f; // usa el formateado (▲, ▼, %)
-          return c.v??"";
-        })
-      );
-      return {cols,rows};
-    }
-    function sliceRange(rows,{startCol=0,endCol=null,startRow=0,endRow=null}={}){
-      const colCount=rows[0]?.length??0;
-      const rowCount=rows.length;
-      const eCol=endCol==null?colCount-1:Math.min(endCol,colCount-1);
-      let eRow=rowCount-1;
-      if(endRow!=null) eRow=Math.min(endRow,rowCount-1);
-      else for(let i=rowCount-1;i>=startRow;i--){ if((rows[i]||[]).some(c=>String(c).trim()!=='')){eRow=i;break;} }
-      return rows.slice(startRow,eRow+1).map(r=>r.slice(startCol,eCol+1));
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start === -1 || end === -1) throw new Error('Respuesta GViz inválida');
+      const json = JSON.parse(text.slice(start, end + 1));
+      if (json.status && json.status !== 'ok') {
+        const det = json.errors && json.errors[0] ? `${json.errors[0].message}: ${json.errors[0].detailed_message || ''}` : 'Error GViz';
+        throw new Error(det);
+      }
+      const cols = (json.table?.cols || []).map(c => c.label || c.id || "");
+      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => (c ? c.v : "")));
+      return { cols, rows };
     }
 
-    function makeCard(title,subtitle){
-      const card=document.createElement("article"); card.className="card";
-      const head=document.createElement("header"); const h2=document.createElement("h2"); h2.textContent=title;
-      const small=document.createElement("small"); small.textContent=subtitle||"";
-      head.appendChild(h2); head.appendChild(small); card.appendChild(head); return card;
-    }
-
-    function applyConditionalFormatting(table,cols){
-      const names=cols.map(h=>(h||"").toLowerCase().replace(/\s+/g,""));
-      const idxScore=names.findIndex(h=>h.includes("score"));
-      const idxWin=names.findIndex(h=>h.includes("winrate"));
-      const idxCGan=names.findIndex(h=>h.includes("cambiopartidasganadas"));
-      const idxCPer=names.findIndex(h=>h.includes("cambiopartidasperdidas"));
-      const idxCPos=names.findIndex(h=>/cambioposici/.test(h));
-      table.querySelectorAll("tbody tr").forEach(tr=>{
-        if(idxScore!=-1){const td=tr.children[idxScore];const n=parseFloat(td.textContent);if(!isNaN(n)) td.textContent=n.toFixed(2);}
-        if(idxWin!=-1){const td=tr.children[idxWin];let n=parseFloat(td.textContent);if(!isNaN(n)){if(n<=1)n*=100;td.textContent=n.toFixed(2)+"%";}}
-        if(idxScore!=-1){const td=tr.children[idxScore];const n=parseFloat(td.textContent);let bg=null,fg="#000";
-          if(!isNaN(n)){if(n>=90)bg="#00E5FF";else if(n>=80)bg="#00E676";else if(n>=70)bg="#43A047";
-          else if(n>=60)bg="#C5E1A5";else if(n>=50)bg="#FFF176";else if(n>=40)bg="#FFB74D";
-          else if(n>=30)bg="#FB8C00";else if(n>=20)bg="#FF3B30";else if(n>=10){bg="#C62828";fg="#FFF";}else{bg="#000";fg="#FFF";}}
-          if(bg){td.style.background=bg;td.style.color=fg;td.classList.add("score");}}
-        const paintCambio=(cell,invert=false)=>{
-          const t=(cell.textContent||"").trim();
-          if(t==="0"){cell.style.color="#42A5F5";return;}
-          if(t.includes("▲")) cell.style.color=invert?"#C62828":"#2E7D32";
-          if(t.includes("▼")) cell.style.color=invert?"#2E7D32":"#C62828";
-        };
-        if(idxCGan!=-1) paintCambio(tr.children[idxCGan]);
-        if(idxCPer!=-1) paintCambio(tr.children[idxCPer],true);
-        if(idxCPos!=-1){const td=tr.children[idxCPos];const t=td.textContent.trim();
-          if(t==="-") td.style.color="#42A5F5";else if(t.includes("▲")) td.style.color="#2E7D32";else if(t.includes("▼")) td.style.color="#C62828";}
-      });
-    }
-
-    async function renderRanking(key){
-      view.innerHTML="";
-      const cfg=CFG[key];
-      const card=makeCard(cfg.label||key,`gid: ${cfg.gid}`); view.appendChild(card);
-      try{
-        const data=await fetchRange(cfg.gid);
-        const rows=sliceRange(data.rows,cfg.range).filter(r=>r.some(c=>String(c).trim()!==""));
-        let cols=data.cols.slice(cfg.range.startCol,cfg.range.endCol+1);
-        const table=document.createElement("table");
-        const thead=document.createElement("thead");const trh=document.createElement("tr");
-        cols.forEach(h=>{const th=document.createElement("th");th.textContent=h;trh.appendChild(th);});
-        thead.appendChild(trh);table.appendChild(thead);
-        const tbody=document.createElement("tbody");
-        rows.forEach(r=>{const tr=document.createElement("tr");cols.forEach((_,i)=>{const td=document.createElement("td");td.textContent=r[i];tr.appendChild(td);});tbody.appendChild(tr);});
-        table.appendChild(tbody);card.appendChild(table);
-        applyConditionalFormatting(table,cols);
-      }catch(err){const p=document.createElement("p");p.className="warn";p.textContent=`Error: ${err.message}`;card.appendChild(p);}
-    }
-
-    async function renderReglamento(){
-      view.innerHTML="";
-      const gid=CFG.reglamento.gid;
-      const card=makeCard("Reglamento",`gid:${gid}`); view.appendChild(card);
-      try{
-        const regl=await fetchRange(gid,"B1:D500"), enm=await fetchRange(gid,"F1:G100");
-        const R=regl.rows; const E=enm.rows;
-        const lb=document.createElement("div"),rb=document.createElement("div");
-        const wrap=document.createElement("div");wrap.className="two-col";
-        wrap.appendChild(Object.assign(document.createElement("div"),{className:"panel",innerHTML:"<header>Reglamento</header>"})).appendChild(lb);
-        wrap.appendChild(Object.assign(document.createElement("div"),{className:"panel",innerHTML:"<header>Enmiendas</header>"})).appendChild(rb);
-        card.appendChild(wrap);
-        const titulo=(R[0]?.[0]||"").trim();if(titulo){const t=document.createElement("div");t.className="reg-title";t.textContent=titulo;lb.appendChild(t);}
-        for(let i=1;i<R.length;i++){const B=R[i][0]||"",C=R[i][1]||"",D=R[i][2]||"";if(!B&&!C&&!D)continue;
-          if(/^Sección\b/i.test(D)){const row=document.createElement("div");row.className="reg-row";
-            const idx=document.createElement("div");idx.className="idx";idx.textContent=[B,C].filter(Boolean).join(" ");
-            const title=document.createElement("div");title.className="reg-sec-title";title.textContent=D;
-            row.appendChild(idx);row.appendChild(title);lb.appendChild(row);} 
-          else {const row=document.createElement("div");row.className="reg-row";
-            const idx=document.createElement("div");idx.className="idx";idx.textContent=[B,C].filter(Boolean).join(" ");
-            const txt=document.createElement("div");txt.className="wrap italic";txt.textContent=D;
-            row.appendChild(idx);row.appendChild(txt);lb.appendChild(row);}
+    function sliceRange(rows, {startCol=0,endCol=null,startRow=0,endRow=null}={}){
+      const colCount = rows[0]?.length ?? 0;
+      const rowCount = rows.length;
+      const eCol = endCol == null ? (colCount ? colCount-1 : 0) : Math.min(endCol, Math.max(0,colCount-1));
+      let eRow = rowCount-1;
+      if (endRow != null) eRow = Math.min(endRow, Math.max(0,rowCount-1));
+      else {
+        for (let i=rowCount-1; i>=startRow; i--) {
+          if ((rows[i]||[]).some(c => String(c).trim() !== '')) { eRow = i; break; }
         }
-        const enTitle=(E[0]?.[0]||"").trim();if(enTitle){const t=document.createElement("div");t.className="reg-sec-title";t.textContent=enTitle;rb.appendChild(t);}
-        for(let i=1;i<E.length;i++){const f=E[i][0]||"",g=E[i][1]||"";if(!f&&!g)continue;
-          const block=document.createElement("div");block.style.padding="6px 0";
-          const idx=document.createElement("div");idx.className="bold";idx.textContent=f;
-          const txt=document.createElement("div");txt.className="italic wrap";txt.textContent=g;
-          block.appendChild(idx);block.appendChild(txt);rb.appendChild(block);}
-      }catch(err){const p=document.createElement("p");p.className="warn";p.textContent=`Error: ${err.message}`;card.appendChild(p);}
+      }
+      return rows.slice(startRow, eRow+1).map(r => r.slice(startCol, eCol+1));
     }
 
-    // === Inicialización ===
-    function buildSelector(){
-      Object.keys(CFG).forEach(k=>{
-        if(k==="reglamento") return;
-        const opt=document.createElement("option");opt.value=k;opt.textContent=CFG[k].label||k;
-        selTorneo.appendChild(opt);
+    function makeCard(title, subtitle){
+      const card=document.createElement('article'); card.className='card';
+      const head=document.createElement('header'); const h2=document.createElement('h2'); h2.textContent=title;
+      const small=document.createElement('small'); small.textContent=subtitle||''; head.appendChild(h2); head.appendChild(small);
+      card.appendChild(head); return card;
+    }
+
+    // =============================
+    // Formatos condicionales y normalizaciones (Torneo)
+    // =============================
+    function applyConditionalFormatting(table, cols){
+      const norm = s => (s||'').toLowerCase().split(' ').join('');
+      const names = cols.map(norm);
+      const idxScore = names.findIndex(h => h.indexOf('score') !== -1);
+      const idxWin   = names.findIndex(h => h.indexOf('winrate') !== -1);
+      const idxCGan  = names.findIndex(h => h.indexOf('cambiopartidasganadas') !== -1);
+      const idxCPer  = names.findIndex(h => h.indexOf('cambiopartidasperdidas') !== -1);
+      const idxCPos  = names.findIndex(h => h.indexOf('cambioposición') !== -1 || h.indexOf('cambioposicion') !== -1);
+
+      table.querySelectorAll('tbody tr').forEach(tr => {
+        if (idxScore !== -1) {
+          const td = tr.children[idxScore];
+          const n = parseFloat(String(td.textContent).replace(',', '.'));
+          if (!isNaN(n)) td.textContent = n.toFixed(2);
+        }
+        if (idxWin !== -1) {
+          const td = tr.children[idxWin];
+          let n = parseFloat(String(td.textContent).replace('%','').replace(',', '.'));
+          if (!isNaN(n)) {
+            if (n <= 1) n = n * 100;
+            td.textContent = n.toFixed(2) + '%';
+          }
+        }
+        if (idxScore !== -1){
+          const td = tr.children[idxScore];
+          const n = parseFloat(String(td.textContent).replace(',', '.'));
+          let bg=null, fg='#000';
+          if (!isNaN(n)){
+            if (n >= 90) bg = '#00E5FF';
+            else if (n >= 80) bg = '#00E676';
+            else if (n >= 70) bg = '#43A047';
+            else if (n >= 60) bg = '#C5E1A5';
+            else if (n >= 50) bg = '#FFF176';
+            else if (n >= 40) bg = '#FFB74D';
+            else if (n >= 30) bg = '#FB8C00';
+            else if (n >= 20) bg = '#FF3B30';
+            else if (n >= 10) { bg = '#C62828'; fg = '#FFF'; }
+            else { bg = '#000000'; fg = '#FFF'; }
+          }
+          if (bg){ td.style.background = bg; td.style.color = fg; td.classList.add('score'); }
+        }
+        const paintCambio = (cell, invert=false) => {
+          const t = (cell.textContent||'').trim();
+          if (t === '0') { cell.style.color = '#42A5F5'; return; }
+          const up = t.indexOf('▲') !== -1;
+          const down = t.indexOf('▼') !== -1;
+          if (!invert) { if (up) cell.style.color = '#2E7D32'; if (down) cell.style.color = '#C62828'; }
+          else { if (up) cell.style.color = '#C62828'; if (down) cell.style.color = '#2E7D32'; }
+        };
+        if (idxCGan !== -1) paintCambio(tr.children[idxCGan], false);
+        if (idxCPer !== -1) paintCambio(tr.children[idxCPer], true);
+        if (idxCPos !== -1){
+          const td = tr.children[idxCPos];
+          const t = (td.textContent||'').trim();
+          if (t === '-') td.style.color = '#42A5F5';
+          else if (t.indexOf('▲') !== -1) td.style.color = '#2E7D32';
+          else if (t.indexOf('▼') !== -1) td.style.color = '#C62828';
+        }
       });
     }
-    buildSelector();
 
-    btnReglamento.onclick=()=>renderReglamento();
-    btnActualizar.onclick=()=>{
-      if(view.querySelector("table")) renderRanking(selTorneo.value); else renderReglamento();
-    };
-    window.onload=()=>renderRanking(Object.keys(CFG).find(k=>k!=="reglamento"));
+    // =============================
+    // Reglamento (forzando rangos A1 + headers=0)
+    // =============================
+    async function renderReglamento(){
+      view.innerHTML='';
+      const gid = CFG.reglamento.gid;
+
+      const card = makeCard('Reglamento', `gid: ${gid}`);
+      const wrap = document.createElement('div'); wrap.className='two-col';
+
+      const left = document.createElement('div'); left.className='panel';
+      left.appendChild(Object.assign(document.createElement('header'),{textContent:'Reglamento'}));
+      const lb=document.createElement('div'); lb.className='body'; left.appendChild(lb);
+
+      const right = document.createElement('div'); right.className='panel';
+      right.appendChild(Object.assign(document.createElement('header'),{textContent:'Enmiendas'}));
+      const rb=document.createElement('div'); rb.className='body'; right.appendChild(rb);
+
+      card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right); view.appendChild(card);
+
+      try{
+        // Reglamento: B1:D500 (B1 título; desde fila 2 => B,C,D)
+        const regl = await fetchRange(gid, 'B1:D500');
+        const R = regl.rows; // Relativo al rango: B=0, C=1, D=2
+
+        // Título (B1)
+        const titulo = (R[0]?.[0] ?? '').toString().trim();
+        if (titulo){
+          const t = document.createElement('div'); t.className='reg-title'; t.textContent = titulo;
+          lb.appendChild(t);
+        }
+
+        // Cuerpo: desde fila 2 (index 1)
+        for (let i = 1; i < R.length; i++){
+          const r = R[i] || [];
+          const B = (r[0] ?? '').toString().trim(); // índice Sección/Art.
+          const C = (r[1] ?? '').toString().trim(); // inciso/numeral
+          const D = (r[2] ?? '').toString().trim(); // contenido
+
+          if (!B && !C && !D) continue;
+
+          if (/^Sección\b/i.test(D)) {
+            const rowSec = document.createElement('div'); rowSec.className='reg-row';
+            const idx = document.createElement('div'); idx.className='idx';
+            idx.textContent = [B, C].filter(Boolean).join(' ');
+            const title = document.createElement('div'); title.className='reg-sec-title';
+            title.style.margin='0';
+            title.textContent = D;
+            rowSec.appendChild(idx); rowSec.appendChild(title);
+            lb.appendChild(rowSec);
+            continue;
+          }
+
+          const item = document.createElement('div'); item.className = 'reg-row';
+          const idx = document.createElement('div'); idx.className = 'idx';
+          idx.innerHTML = [B, C].filter(Boolean).join(' ') || '&nbsp;';
+          const txtDiv = document.createElement('div'); txtDiv.className = 'wrap italic';
+          txtDiv.textContent = D;
+          item.appendChild(idx); item.appendChild(txtDiv); lb.appendChild(item);
+        }
+
+        // Enmiendas: F1:G100 (F1 título; F/G desde fila 2)
+        const enm = await fetchRange(gid, 'F1:G100');
+        const E = enm.rows; // F=0, G=1
+
+        const enTitle = (E[0]?.[0] ?? '').toString().trim();
+        if (enTitle){
+          const t2 = document.createElement('div'); t2.className='reg-sec-title'; t2.textContent = enTitle;
+          rb.appendChild(t2);
+        }
+        for (let i=1; i<E.length; i++){
+          const f = (E[i]?.[0] ?? '').toString().trim();
+          const g = (E[i]?.[1] ?? '').toString().trim();
+          if (!f && !g) continue;
+
+          const block = document.createElement('div'); block.style.padding='8px 0';
+          const idx = document.createElement('div'); idx.className = 'bold'; idx.textContent = f;
+          const txt = document.createElement('div'); txt.className = 'italic wrap'; txt.textContent = g;
+          block.appendChild(idx); block.appendChild(txt); rb.appendChild(block);
+        }
+
+      }catch(err){
+        const p=document.createElement('p'); p.className='warn';
+        p.textContent = `No se pudo leer el reglamento: ${err.message}`;
+        card.appendChild(p);
+      }
+    }
+
+    // =============================
+    // Torneo (Apertura/Clausura)
+    // =============================
+    async function renderRanking(which){
+      view.innerHTML='';
+      const cfg = CFG[which];
+      const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', `gid: ${cfg.gid}`);
+      view.appendChild(card);
+      try{
+        const res = await fetch(gvizUrl(cfg.gid)); // sin rango => mantenemos headers por defecto
+        const txt = await res.text();
+        const data = parseGviz(txt);
+        const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
+        let cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol + 1);
+
+        // Recorte determinístico
+        const norm = (h) => (h || '').toString().trim().toLowerCase();
+        const scoreIdx     = cols.findIndex(h => /(^|\s)score($|\s)/i.test(h || ''));
+        const cambioPosIdx = cols.findIndex(h => /cambio.*posici/i.test(norm(h)));
+        let lastKeep = scoreIdx;
+        if (which === 'clausura' && cambioPosIdx !== -1) lastKeep = Math.max(scoreIdx, cambioPosIdx);
+        const useIdx = (lastKeep >= 0)
+          ? Array.from({ length: lastKeep + 1 }, (_, i) => i)
+          : Array.from({ length: cols.length }, (_, i) => i);
+
+        cols = useIdx.map(i => cols[i]);
+        const prunedRows = rows.map(r => useIdx.map(i => r[i]));
+
+        const table=document.createElement('table');
+        const thead=document.createElement('thead'); const trh=document.createElement('tr');
+        cols.forEach(h=>{const th=document.createElement('th'); th.textContent=h; trh.appendChild(th);});
+        thead.appendChild(trh); table.appendChild(thead);
+
+        const tbody=document.createElement('tbody');
+        prunedRows.forEach(r=>{
+          const tr=document.createElement('tr');
+          for(let i=0;i<cols.length;i++){
+            const td=document.createElement('td'); td.textContent = r[i] ?? ''; tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody); card.appendChild(table);
+
+        applyConditionalFormatting(table, cols);
+      }catch(err){
+        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el torneo: ${err.message}`; card.appendChild(p);
+      }
+    }
+
+    // =============================
+    // Events
+    // =============================
+    btnReglamento.addEventListener('click', () => renderReglamento());
+    btnTorneo.addEventListener('click', () => renderRanking(selTorneo.value));
+    selTorneo.addEventListener('change', () => renderRanking(selTorneo.value));
+    btnActualizar.addEventListener('click', () => {
+      const active = view.querySelector('.card h2')?.textContent || '';
+      if (/Reglamento/.test(active)) renderReglamento();
+      else renderRanking(selTorneo.value);
+    });
+
+    // Vista inicial
+    renderReglamento();
   </script>
 </body>
 </html>
