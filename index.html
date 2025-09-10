@@ -3,21 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Torneo Taruga – Tablas limpias (GViz)</title>
+  <title>Torneo Taruga – GViz</title>
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --text:#e6eefc; --muted:#8aa0c8; --border:#22314f; --accent:#4cc9f0; }
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Ubuntu,sans-serif;background:var(--bg);color:var(--text)}
-    header{padding:24px 16px;text-align:center;border-bottom:1px solid var(--border)}
-    header h1{margin:0 0 6px;font-weight:800;letter-spacing:.2px}
-    header p{margin:0;color:var(--muted)}
-    main{max-width:1250px;margin:0 auto;padding:20px}
-    .controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
-    input[type="search"]{background:#0e172a;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 14px;min-width:280px}
+    header{padding:26px 16px 18px;text-align:center;border-bottom:1px solid var(--border)}
+    header h1{margin:0 0 8px;font-weight:800;letter-spacing:.2px}
+    main{max-width:1200px;margin:0 auto;padding:18px}
+    .toolbar{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:16px}
     .btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
     .btn:hover{border-color:var(--accent)}
-    .grid{display:grid;grid-template-columns:1fr;gap:18px}
-    @media (min-width: 1100px){.grid{grid-template-columns:1fr 1fr}}
+    select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+    .view{min-height:200px}
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.18)}
     .card header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
     .card h2{margin:0;font-size:18px}
@@ -37,51 +35,61 @@
 </head>
 <body>
   <header>
-    <h1>Tabla del Torneo Taruga</h1>
-    <p>Tablas limpias con Google Visualization API (GViz). Debe estar compartido como “Cualquiera con el enlace – Lector”.</p>
+    <h1>Torneo Taruga</h1>
+    <div class="toolbar">
+      <button id="btnReglamento" class="btn">Reglamento</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="btnTorneo" class="btn">Torneo</button>
+        <select id="selTorneo" aria-label="Seleccionar torneo">
+          <option value="apertura">Apertura 2025</option>
+          <option value="clausura">Clausura 2025</option>
+        </select>
+      </div>
+      <button id="btnActualizar" class="btn">Actualizar</button>
+    </div>
   </header>
   <main>
-    <div class="controls">
-      <input id="search" type="search" placeholder="Buscar en las tablas…" />
-      <button class="btn" id="refresh">Actualizar datos</button>
-    </div>
-
-    <section id="cards" class="grid"></section>
-
-    <div class="footer">Hecho para Renzo • GitHub Pages • <span id="updated"></span></div>
+    <section id="view" class="view"></section>
+    <p style="text-align:center;color:var(--muted)">Hecho para Renzo • GitHub Pages</p>
   </main>
 
   <script>
     // =============================
-    // 🚧 CONFIGURACIÓN – EDITA AQUÍ
+    // CONFIG
     // =============================
-    // ID del documento (entre /d/ y /edit en la URL del Google Sheet original)
     const SHEET_ID = "1_fruD9zPdXhiWcP_wuuryIFHmxLQBlYHDM9CyY0_1s4";
 
-    // Lista de hojas a mostrar (solo las que quieras). Usa sus gid.
-    const SHEET_ID = "1_fruD9zPdXhiWcP_wuuryIFHmxLQBlYHDM9CyY0_1s4";
-
-    const SHEETS = [
-      // Reglamento con dos regiones: texto principal (B:K) y enmiendas (M:V)
-      { title: "Reglamento", gid: "406827875", type: "reglamento", leftRange: {startCol:1,endCol:10,startRow:1,endRow:200}, rightRange: {startCol:12,endCol:21,startRow:1,endRow:200} },
-      // Rankings: solo el bloque superior izquierdo; ajustá filas/columnas si hace falta
-      { title: "Torneo Apertura 2025", gid: "888277887", type: "ranking", range: {startCol:0,endCol:10,startRow:0,endRow:20} },
-      { title: "Torneo Clausura 2025", gid: "62379087", type: "ranking", range: {startCol:0,endCol:10,startRow:0,endRow:20} }
-    ];
+    const CFG = {
+      reglamento: {
+        gid: "406827875",
+        left:  { startCol: 1, endCol: 10, startRow: 0, endRow: null }, // B..K
+        right: { startCol: 12, endCol: 21, startRow: 0, endRow: null } // M..V
+      },
+      apertura: {
+        gid: "888277887",
+        // A..J (Score en J). Tomamos filas con datos automáticamente
+        range: { startCol: 0, endCol: 9, startRow: 0, endRow: null }
+      },
+      clausura: {
+        gid: "62379087",
+        // A..K (Score en J, Cambio Posición en K). Filas dinámicas
+        range: { startCol: 0, endCol: 10, startRow: 0, endRow: null }
+      }
+    };
 
     // =============================
-    // ⚙️ Utilidades
+    // Helpers
     // =============================
-    const cardsEl = document.getElementById('cards');
-    const updatedEl = document.getElementById('updated');
-    const searchEl = document.getElementById('search');
+    const view = document.getElementById('view');
+    const btnReglamento = document.getElementById('btnReglamento');
+    const btnTorneo = document.getElementById('btnTorneo');
+    const btnActualizar = document.getElementById('btnActualizar');
+    const selTorneo = document.getElementById('selTorneo');
 
     function gvizUrl(gid){
-      // out:json => respuesta como JS envuelto en JSON
-      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}&cacheBust=${Date.now()}`;
     }
 
-    // Parseador del JSON envuelto que devuelve GViz
     function parseGviz(text){
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
@@ -91,216 +99,127 @@
         const det = json.errors && json.errors[0] ? `${json.errors[0].message}: ${json.errors[0].detailed_message || ''}` : 'Error GViz';
         throw new Error(det);
       }
-      const cols = (json.table.cols || []).map(c => c.label || c.id || "");
-      const rows = (json.table.rows || []).map(r => (r.c || []).map(c => (c ? c.v : "")));
+      const cols = (json.table?.cols || []).map(c => c.label || c.id || "");
+      const rows = (json.table?.rows || []).map(r => (r.c || []).map(c => (c ? c.v : "")));
       return { cols, rows };
     }
 
-    function toTable({cols, rows}){
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      const trh = document.createElement('tr');
-      cols.forEach((h, idx) => {
-        const th = document.createElement('th');
-        th.textContent = h;
-        trh.appendChild(th);
-      });
-      thead.appendChild(trh);
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      rows.forEach(r => {
-        if(r.every(cell => String(cell).trim() === '')) return; // omite filas vacías
-        const tr = document.createElement('tr');
-        r.forEach((c, i) => {
-          const td = document.createElement('td');
-          td.textContent = c;
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      return table;
+    function sliceRange(rows, {startCol=0,endCol=null,startRow=0,endRow=null}={}){
+      const colCount = rows[0]?.length ?? 0;
+      const rowCount = rows.length;
+      const eCol = endCol == null ? (colCount ? colCount-1 : 0) : Math.min(endCol, Math.max(0,colCount-1));
+      // Detecta automáticamente la última fila con datos si endRow es null
+      let eRow = rowCount-1;
+      if (endRow != null) eRow = Math.min(endRow, Math.max(0,rowCount-1));
+      else {
+        for (let i=rowCount-1; i>=startRow; i--) { if ((rows[i]||[]).some(c => String(c).trim() !== '')) { eRow = i; break; } }
+      }
+      return rows.slice(startRow, eRow+1).map(r => r.slice(startCol, eCol+1));
     }
 
     function clamp(n,min,max){return Math.max(min, Math.min(max, n));}
-
     function colorForScore(val){
-      // Paleta aproximada al sheet: verde -> amarillo -> naranja
       if (isNaN(val)) return '';
-      const v = clamp(val, 0, 70); // ajusta al rango típico
-      const t = v/70; // 0..1
-      // Interpola entre #218838 (verde) y #e67e22 (naranja)
+      const v = clamp(val, 0, 70); const t=v/70;
       const c1=[0x21,0x88,0x38], c2=[0xe6,0x7e,0x22];
       const mix = i => Math.round(c1[i]*(1-t)+c2[i]*t);
       return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
     }
 
-    function sortBy(table, colIndex){
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-      const current = table.getAttribute('data-sort-col') == colIndex ? table.getAttribute('data-sort-dir') : null;
-      const dir = current === 'asc' ? 'desc' : 'asc';
-      rows.sort((a,b) => {
-        const av = a.children[colIndex].textContent;
-        const bv = b.children[colIndex].textContent;
-        const an = parseFloat(av.replace(/,/g, '.'));
-        const bn = parseFloat(bv.replace(/,/g, '.'));
-        const aIsNum = !isNaN(an) && av.trim() !== '';
-        const bIsNum = !isNaN(bn) && bv.trim() !== '';
-        if(aIsNum && bIsNum){ return dir === 'asc' ? an - bn : bn - an; }
-        return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-      });
-      tbody.innerHTML = '';
-      rows.forEach(r => tbody.appendChild(r));
-      table.setAttribute('data-sort-col', colIndex);
-      table.setAttribute('data-sort-dir', dir);
+    function makeCard(title, subtitle){
+      const card=document.createElement('article'); card.className='card';
+      const head=document.createElement('header'); const h2=document.createElement('h2'); h2.textContent=title;
+      const small=document.createElement('small'); small.textContent=subtitle||''; head.appendChild(h2); head.appendChild(small);
+      card.appendChild(head); return card;
     }
 
-    function filterTables(term){
-      const cards = Array.from(document.querySelectorAll('.card'));
-      cards.forEach(card => {
-        const table = card.querySelector('table');
-        if(!table){ card.classList.remove('hidden'); return; }
-        const hay = Array.from(table.querySelectorAll('tbody tr')).some(tr =>
-          Array.from(tr.children).some(td => td.textContent.toLowerCase().includes(term))
-        );
-        card.classList.toggle('hidden', !hay);
-      });
-    }
+    // =============================
+    // Render: Reglamento
+    // =============================
+    async function renderReglamento(){
+      view.innerHTML='';
+      const cfg = CFG.reglamento; const card = makeCard('Reglamento', `gid: ${cfg.gid}`);
+      const wrap = document.createElement('div'); wrap.className='two-col';
+      const left = document.createElement('div'); left.className='panel';
+      left.appendChild(Object.assign(document.createElement('header'),{textContent:'Reglamento'}));
+      const lb=document.createElement('div'); lb.className='body'; left.appendChild(lb);
+      const right = document.createElement('div'); right.className='panel';
+      right.appendChild(Object.assign(document.createElement('header'),{textContent:'Enmiendas'}));
+      const rb=document.createElement('div'); rb.className='body'; right.appendChild(rb);
+      card.appendChild(wrap); wrap.appendChild(left); wrap.appendChild(right);
+      view.appendChild(card);
 
-    async function loadOne(entry){
-      const { title, gid, type } = entry;
-      const card = document.createElement('article');
-      card.className = 'card';
-      const head = document.createElement('header');
-      const h2 = document.createElement('h2');
-      h2.textContent = title;
-      const small = document.createElement('small');
-      small.textContent = `gid: ${gid}`;
-      head.appendChild(h2);
-      head.appendChild(small);
-      card.appendChild(head);
+      try{
+        const res = await fetch(gvizUrl(cfg.gid)); const txt = await res.text(); const data = parseGviz(txt);
+        const leftRows = sliceRange(data.rows, cfg.left);
+        leftRows.forEach(r => {
+          const num1=r[0]??''; const num2=r[1]??''; const text=(r.slice(2).join(' ').trim());
+          if (!num1 && !num2 && !text) return;
+          const row=document.createElement('div');
+          if (/secci[óo]n/i.test(text)) { row.style.margin='12px 0 6px'; row.innerHTML = `<div class="badge">${text}</div>`; }
+          else if (/^Art\./i.test(num1) || /^Art\./i.test(num2)) {
+            row.style.display='grid'; row.style.gridTemplateColumns='100px 1fr'; row.style.gap='8px'; row.style.padding='6px 0';
+            row.innerHTML = `<div><strong>${[num1,num2].filter(Boolean).join(' ')}</strong></div><div style="text-align:center;line-height:1.4">${text}</div>`;
+          } else if (text) { row.style.textAlign='center'; row.style.padding='4px 0'; row.textContent=text; }
+          lb.appendChild(row);
+        });
 
-      try {
-        const url = gvizUrl(gid) + `&cacheBust=${Date.now()}`;
-        const res = await fetch(url, { cache: 'no-store' });
-        const txt = await res.text();
-        const data = parseGviz(txt);
-
-        // util para cortar por rango
-        const sliceRange = (rows, {startCol=0,endCol=null,startRow=0,endRow=null}={}) => {
-          const eCol = endCol ?? (rows[0]?.length ?? 0)-1;
-          const eRow = endRow ?? rows.length-1;
-          return rows.slice(startRow, eRow+1).map(r => r.slice(startCol, eCol+1));
-        };
-
-        if (type === 'reglamento') {
-          const wrap = document.createElement('div');
-          wrap.className = 'two-col';
-
-          // Panel izquierdo: cuerpo del reglamento (B..K)
-          const left = document.createElement('div'); left.className='panel';
-          const lh = document.createElement('header'); lh.textContent='Reglamento'; left.appendChild(lh);
-          const lb = document.createElement('div'); lb.className='body'; left.appendChild(lb);
-
-          const leftRows = sliceRange(data.rows, entry.leftRange);
-          // Render simplificado: B,C como numeración; D..K como texto unido
-          leftRows.forEach(r => {
-            const num1 = r[0] ?? ''; // B
-            const num2 = r[1] ?? ''; // C
-            const text = (r.slice(2).join(' ').trim());
-            if (!num1 && !num2 && !text) return;
-            const row = document.createElement('div');
-            if (/secci[óo]n/i.test(text)) { // fila de sección
-              row.style.margin='12px 0 6px';
-              row.innerHTML = `<div class="badge">${text}</div>`;
-            } else if (/^Art\./i.test(num1) || /^Art\./i.test(num2)) {
-              row.style.display='grid';
-              row.style.gridTemplateColumns='80px 1fr';
-              row.style.gap='8px';
-              row.style.padding='6px 0';
-              row.innerHTML = `<div><strong>${[num1,num2].filter(Boolean).join(' ')}</strong></div><div style="text-align:center;line-height:1.35">${text}</div>`;
-            } else if (text) {
-              row.style.textAlign='center';
-              row.style.padding='4px 0';
-              row.textContent = text;
-            }
-            lb.appendChild(row);
-          });
-
-          // Panel derecho: Enmiendas (M..V)
-          const right = document.createElement('div'); right.className='panel';
-          const rh = document.createElement('header'); rh.textContent='Enmiendas'; right.appendChild(rh);
-          const rb = document.createElement('div'); rb.className='body'; right.appendChild(rb);
-          const rightRows = sliceRange(data.rows, entry.rightRange);
-          // Asumimos encabezado en primera fila: [Titulo, Texto]
-          rightRows.forEach(r => {
-            const titulo = r[0];
-            const texto = r.slice(1).join(' ').trim();
-            if (!titulo && !texto) return;
-            const item = document.createElement('div');
-            if (/enmienda/i.test(titulo)) {
-              item.innerHTML = `<div class="badge">${titulo}</div><div style="margin-top:6px">${texto}</div>`;
-            } else {
-              item.innerHTML = `<div><strong>${titulo ?? ''}</strong></div><div>${texto}</div>`;
-            }
-            item.style.padding='6px 0';
-            rb.appendChild(item);
-          });
-
-          wrap.appendChild(left);
-          wrap.appendChild(right);
-          card.appendChild(wrap);
-          return card;
-        }
-
-        if (type === 'ranking') {
-          const rows = sliceRange(data.rows, entry.range);
-          const cols = data.cols.slice(entry.range?.startCol ?? 0, (entry.range?.endCol ?? data.cols.length-1)+1);
-          const table = toTable({cols, rows});
-          // aplicar colores a columna Score
-          const scoreIdx = cols.findIndex(h => /score/i.test(h));
-          if (scoreIdx !== -1) {
-            table.querySelectorAll('tbody tr').forEach(tr => {
-              const val = parseFloat((tr.children[scoreIdx].textContent || '').replace(',', '.'));
-              const bg = colorForScore(val);
-              if (bg) {
-                tr.children[scoreIdx].style.background = bg;
-                tr.children[scoreIdx].style.color = '#000';
-                tr.children[scoreIdx].classList.add('score');
-              }
-            });
-          }
-          card.appendChild(table);
-          return card;
-        }
-
-        // Default: tabla simple
-        card.appendChild(toTable(data));
-        return card;
-      } catch (err) {
-        const p = document.createElement('p');
-        p.className = 'warn';
-        p.innerHTML = `No se pudo leer esta hoja. Error: ${err.message}`;
-        card.appendChild(p);
-        return card;
+        const rightRows = sliceRange(data.rows, cfg.right);
+        rightRows.forEach(r => {
+          const titulo=r[0]; const texto=r.slice(1).join(' ').trim();
+          if (!titulo && !texto) return; const item=document.createElement('div'); item.style.padding='6px 0';
+          if (/enmienda/i.test(titulo)) item.innerHTML = `<div class="badge">${titulo}</div><div style="margin-top:6px">${texto}</div>`;
+          else item.innerHTML = `<div><strong>${titulo??''}</strong></div><div>${texto}</div>`;
+          rb.appendChild(item);
+        });
+      }catch(err){
+        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el reglamento: ${err.message}`; card.appendChild(p);
       }
     }
 
-    async function loadAll(){
-      cardsEl.innerHTML = '';
-      const parts = await Promise.allSettled(SHEETS.map(loadOne));
-      let ok = 0;
-      parts.forEach(p => { if(p.status === 'fulfilled'){ ok++; cardsEl.appendChild(p.value); } });
-      updatedEl.textContent = ok ? `Última actualización: ${new Date().toLocaleString()}` : 'Sin datos';
+    // =============================
+    // Render: Ranking (Apertura/Clausura)
+    // =============================
+    async function renderRanking(which){
+      view.innerHTML=''; const cfg = CFG[which]; const card = makeCard(which==='apertura'?'Torneo Apertura 2025':'Torneo Clausura 2025', `gid: ${cfg.gid}`); view.appendChild(card);
+      try{
+        const res = await fetch(gvizUrl(cfg.gid)); const txt = await res.text(); const data = parseGviz(txt);
+        const rows = sliceRange(data.rows, cfg.range).filter(r => r.some(c => String(c).trim() !== ''));
+        const cols = data.cols.slice(cfg.range.startCol, cfg.range.endCol+1);
+        // Construir tabla
+        const table=document.createElement('table');
+        const thead=document.createElement('thead'); const trh=document.createElement('tr');
+        cols.forEach(h=>{const th=document.createElement('th'); th.textContent=h; trh.appendChild(th);}); thead.appendChild(trh); table.appendChild(thead);
+        const tbody=document.createElement('tbody');
+        rows.forEach(r=>{const tr=document.createElement('tr'); for(let i=0;i<cols.length;i++){const td=document.createElement('td'); td.textContent = r[i] ?? ''; tr.appendChild(td);} tbody.appendChild(tr);});
+        table.appendChild(tbody); card.appendChild(table);
+        // Colorear Score
+        const scoreIdx = cols.findIndex(h => /score/i.test(h));
+        if (scoreIdx !== -1) {
+          table.querySelectorAll('tbody tr').forEach(tr => {
+            const val = parseFloat((tr.children[scoreIdx].textContent||'').replace(',','.'));
+            const bg = colorForScore(val); if (bg){ tr.children[scoreIdx].style.background=bg; tr.children[scoreIdx].style.color='#000'; tr.children[scoreIdx].classList.add('score'); }
+          });
+        }
+      }catch(err){
+        const p=document.createElement('p'); p.className='warn'; p.textContent = `No se pudo leer el torneo: ${err.message}`; card.appendChild(p);
+      }
     }
 
-    document.getElementById('refresh').addEventListener('click', loadAll);
-    searchEl.addEventListener('input', (e)=> filterTables(e.target.value.toLowerCase()));
+    // =============================
+    // Events
+    // =============================
+    btnReglamento.addEventListener('click', () => renderReglamento());
+    btnTorneo.addEventListener('click', () => renderRanking(selTorneo.value));
+    selTorneo.addEventListener('change', () => renderRanking(selTorneo.value));
+    btnActualizar.addEventListener('click', () => {
+      const active = view.querySelector('.card h2')?.textContent || '';
+      if (/Reglamento/.test(active)) renderReglamento();
+      else renderRanking(selTorneo.value);
+    });
 
-    // Arranque
-    loadAll();
+    // Vista inicial: Reglamento
+    renderReglamento();
   </script>
 </body>
 </html>
