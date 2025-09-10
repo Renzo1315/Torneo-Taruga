@@ -214,17 +214,43 @@
       head.appendChild(small);
       card.appendChild(head);
 
-      // Caso 1: tenemos gid → usamos GViz JSON (tablas limpias)
+      // Helpers de fallback
+      const csvUrl = (gid) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${gid}&single=true&output=csv`;
+      const pubhtmlUrl = (gid) => `https://docs.google.com/spreadsheets/d/e/2PACX-PLACEHOLDER/pubhtml?gid=${gid}&single=true`;
+      // Nota: pubhtmlUrl necesita el ID "/d/e/2PACX-..." del link publicado. Si no lo tenés, nos quedamos con CSV como 2do intento.
+
+      // 1) Intento GViz JSON (requiere que el doc sea accesible con enlace o publicado)
       if (entry.gid) {
-        const res = await fetch(gvizUrl(entry.gid), { cache: 'no-store' });
-        const txt = await res.text();
-        const data = parseGviz(txt);
-        small.textContent = `gid: ${entry.gid}`;
-        card.appendChild(toTable(data));
-        return card;
+        try {
+          const res = await fetch(gvizUrl(entry.gid), { cache: 'no-store' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const txt = await res.text();
+          const data = parseGviz(txt);
+          small.textContent = `gid: ${entry.gid}`;
+          card.appendChild(toTable(data));
+          return card;
+        } catch (e) {
+          // 2) Fallback a CSV publicado (si el doc está "Publicar en la web")
+          try {
+            const res2 = await fetch(csvUrl(entry.gid), { cache: 'no-store' });
+            if (!res2.ok) throw new Error(`CSV HTTP ${res2.status}`);
+            const txt2 = await res2.text();
+            const rows = parseCSV(txt2);
+            small.textContent = `gid: ${entry.gid} • CSV`;
+            card.appendChild(toTableFromCSV(rows));
+            return card;
+          } catch (e2) {
+            // 3) Último recurso: mensaje guiando a publicar/compartir
+            const p = document.createElement('p');
+            p.style.padding = '12px 16px';
+            p.innerHTML = `No se pudo leer esta hoja. <br>• Asegurate de que el documento esté <b>Compartir → Cualquiera con el enlace (lector)</b> o <b>Archivo → Compartir → Publicar en la web</b>.<br>• También podés pegar un <b>link pubhtml</b> en la configuración (en lugar de gid) para embeberla en iframe.`;
+            card.appendChild(p);
+            return card;
+          }
+        }
       }
 
-      // Caso 2: link publicado como HTML → incrustar en iframe (fallback sin CORS)
+      // Caso: link publicado como HTML → incrustar en iframe
       if (entry.url && /\/pubhtml(\?|$)/.test(entry.url)) {
         const iframe = document.createElement('iframe');
         const u = new URL(entry.url);
@@ -238,7 +264,7 @@
         return card;
       }
 
-      // Caso 3: URL CSV publicado → parsear CSV
+      // Caso: URL CSV publicado explícito
       if (entry.url) {
         const res = await fetch(entry.url, { cache: 'no-store' });
         const txt = await res.text();
@@ -247,7 +273,6 @@
         return card;
       }
 
-      // Si no hay datos configurados
       const p = document.createElement('p');
       p.textContent = 'Sin fuente configurada para esta hoja.';
       card.appendChild(p);
